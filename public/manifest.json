@@ -2,20 +2,20 @@
   "name": "Margdarshak Career Institute",
   "short_name": "Margdarshak",
   "description": "Student learning portal for courses, notes, results and profile management",
-  "start_url": "/student/login",
-  "scope": "/student/",
+  "start_url": "/student/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#0d6efd",
   "icons": [
     {
-      "src": "/student/icons/icon-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/student/icons/icon-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
