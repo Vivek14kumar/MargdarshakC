@@ -72,57 +72,55 @@ export default function App() {
           <Route path="upload-result" element={<UploadResultsForm />} />
         </Route>
 
-        {/* ================= USER DASHBOARD ================= */}
-        {/* ================= STUDENT ENTRY ================= */}
-<Route
-  path="/student"
-  element={<Navigate to="/student/dashboard" replace />}
-/>
+        {/* ================= STUDENT ================= */}
+<Route path="/student">
+  <Route index element={<Navigate to="dashboard" replace />} />
 
-        <Route
-          path="/student/dashboard"
-          element={
-            <ProtectedRoute>
-              <UserDashboard />
-            </ProtectedRoute>
-          }
-        />
+  <Route
+    path="dashboard"
+    element={
+      <ProtectedRoute>
+        <UserDashboard />
+      </ProtectedRoute>
+    }
+  />
 
-        <Route
-          path="/student/courses"
-          element={
-            <ProtectedRoute>
-              <StudentCourses />
-            </ProtectedRoute>
-          }
-        />
+  <Route
+    path="courses"
+    element={
+      <ProtectedRoute>
+        <StudentCourses />
+      </ProtectedRoute>
+    }
+  />
 
-        <Route
-          path="/student/notes"
-          element={
-            <ProtectedRoute>
-              <StudentNotes />
-            </ProtectedRoute>
-          }
-        />
+  <Route
+    path="notes"
+    element={
+      <ProtectedRoute>
+        <StudentNotes />
+      </ProtectedRoute>
+    }
+  />
 
-        <Route
-          path="/student/results"
-          element={
-            <ProtectedRoute>
-              <StudentResults />
-            </ProtectedRoute>
-          }
-        />
+  <Route
+    path="results"
+    element={
+      <ProtectedRoute>
+        <StudentResults />
+      </ProtectedRoute>
+    }
+  />
 
-        <Route
-          path="/student/profile"
-          element={
-            <ProtectedRoute>
-              <StudentProfile />
-            </ProtectedRoute>
-          }
-        />
+  <Route
+    path="profile"
+    element={
+      <ProtectedRoute>
+        <StudentProfile />
+      </ProtectedRoute>
+    }
+  />
+</Route>
 
         {/* ========= BACKWARD COMPAT ========= 
         <Route path="/dashboard/*" element={<Navigate to="/student/dashboard" replace />} />
