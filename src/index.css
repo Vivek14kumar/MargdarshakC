@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Premium font */
+body {
+  font-family: 'Poppins', sans-serif;
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.25s ease-out;
+}
+
+.input {
+  @apply w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-red-500;
+}
+
+
+
+.spinner {
+  border: 6px solid #f3f3f3; /* Light grey */
+  border-top: 6px solid red; /* Blue */
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
