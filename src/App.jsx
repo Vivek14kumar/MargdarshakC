@@ -76,7 +76,7 @@ export default function App() {
         {/* ================= STUDENT ENTRY ================= */}
 <Route
   path="/student"
-  element={<Navigate to="/login" replace />}
+  element={<Navigate to="/student/dashboard" replace />}
 />
 
         <Route
