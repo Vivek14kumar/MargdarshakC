@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate  } from "react-router-dom";
 import ScrollToTop from "./components/ScrollToTop";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UserProtected from "./components/UserProtected";
@@ -73,6 +73,12 @@ export default function App() {
         </Route>
 
         {/* ================= USER DASHBOARD ================= */}
+        {/* ================= STUDENT ENTRY ================= */}
+<Route
+  path="/student"
+  element={<Navigate to="/student/dashboard" replace />}
+/>
+
         <Route
           path="/student/dashboard"
           element={
