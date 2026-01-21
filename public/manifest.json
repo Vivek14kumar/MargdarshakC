@@ -2,7 +2,7 @@
   "name": "Margdarshak Career Institute",
   "short_name": "Margdarshak",
   "description": "Student learning portal for courses, notes, results and profile management",
-  "start_url": "/login/",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
