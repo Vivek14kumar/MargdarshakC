@@ -122,6 +122,9 @@ export default function App() {
   />
 </Route>
 
+<Route path="/login" element={<Login />} />
+<Route path="/signup" element={<Signup />} />
+
         {/* ========= BACKWARD COMPAT ========= 
         <Route path="/dashboard/*" element={<Navigate to="/student/dashboard" replace />} />
 */}
