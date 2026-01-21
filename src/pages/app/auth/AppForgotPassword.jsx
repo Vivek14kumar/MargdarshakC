@@ -113,7 +113,7 @@ export default function ForgotPassword() {
           {/* ACTIONS */}
           <div className="mt-6 space-y-3 text-sm">
             <button
-              onClick={() => nav("/login")}
+              onClick={() => nav("/app/login")}
               className="w-full py-2.5 rounded-xl bg-red-100 text-red-700 font-medium shadow-md hover:brightness-105 transition"
             >
               Back to Login

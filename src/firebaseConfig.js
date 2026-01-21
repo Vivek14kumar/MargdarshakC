@@ -1,11 +1,14 @@
-// src/firebaseConfig.js
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
-import { getStorage } from "firebase/storage"; // ← add this
+import { getStorage } from "firebase/storage";
 
-// 1️⃣ Your Firebase config
+/* ================= FIREBASE CONFIG ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyClMQocnDPiBxtzyPuwhTOdamQbdB0FaMo",
   authDomain: "coaching-data.firebaseapp.com",
@@ -16,13 +19,16 @@ const firebaseConfig = {
   measurementId: "G-S20J4G6PNQ"
 };
 
-// 2️⃣ Initialize Firebase
+/* ================= INITIALIZE ================= */
 const app = initializeApp(firebaseConfig);
 
-// 3️⃣ Firebase services
+/* ================= AUTH (🔥 IMPORTANT) ================= */
 export const auth = getAuth(app);
-export const firestore = getFirestore(app); // ✅ after `app` is defined
+
+// 🔥 REQUIRED for PWA + TWA
+setPersistence(auth, browserLocalPersistence);
+
+/* ================= DATABASES ================= */
+export const firestore = getFirestore(app);
 export const db = getDatabase(app);
-// Storage
-export const storage = getStorage(app); // ← export storage
-//export const db = getFirestore(app);
+export const storage = getStorage(app);

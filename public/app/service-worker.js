@@ -1,47 +1,27 @@
-const CACHE_NAME = "margdarshak-app-v1";
+const CACHE_NAME = "margdarshak-pwa-v2";
 
-/* Cache only app shell routes */
-const APP_SHELL = [
-  "/app/login",
-  "/app/signup"
-];
-
-/* ================= INSTALL ================= */
-self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
-  );
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
-/* ================= ACTIVATE ================= */
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.map(key => key !== CACHE_NAME && caches.delete(key))
-      )
-    )
-  );
-  self.clients.claim();
+  event.waitUntil(self.clients.claim());
 });
 
-/* ================= FETCH ================= */
+// Cache PDFs for offline view
 self.addEventListener("fetch", event => {
-  const url = new URL(event.request.url);
+  const { request } = event;
 
-  // 🚫 Ignore non-app routes
-  if (!url.pathname.startsWith("/app") && !url.pathname.startsWith("/student")) {
-    return;
-  }
+  if (request.destination === "document" || request.url.endsWith(".pdf")) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async cache => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
 
-  event.respondWith(
-    fetch(event.request)
-      .then(res => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return res;
+        const response = await fetch(request);
+        cache.put(request, response.clone());
+        return response;
       })
-      .catch(() => caches.match(event.request))
-  );
+    );
+  }
 });

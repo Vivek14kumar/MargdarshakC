@@ -155,7 +155,7 @@ export default function Navbar() {
             to="/login"
             aria-label="LogIn"
             className={`${
-              location.pathname === "/contact" ? "text-red-600" : "text-gray-500"
+              location.pathname === "/login" ? "text-red-600" : "text-gray-500"
             } flex flex-col items-center`}
           >
             <FaSignInAlt size={20} />
@@ -166,7 +166,7 @@ export default function Navbar() {
             to="/signup"
             aria-label="SingUp"
             className={`${
-              location.pathname === "/contact" ? "text-red-600" : "text-gray-500"
+              location.pathname === "/signup" ? "text-red-600" : "text-gray-500"
             } flex flex-col items-center`}
           >
             <FaUserPlus size={20} />

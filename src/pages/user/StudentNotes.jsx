@@ -10,10 +10,14 @@ import {
   orderBy,
   updateDoc,
   increment,
+  setDoc,
+  serverTimestamp
 } from "firebase/firestore";
-import StudentBottomNav from "../../components/StudentBottomNav";
+
 import StudentNavbar from "../../components/StudentNavbar";
-import { FileText, DownloadCloud, Check } from "lucide-react";
+import StudentBottomNav from "../../components/StudentBottomNav";
+
+import { FileText, DownloadCloud, Eye, Check } from "lucide-react";
 
 export default function StudentNotes() {
   const uid = auth.currentUser?.uid;
@@ -21,119 +25,156 @@ export default function StudentNotes() {
   const [courses, setCourses] = useState([]);
   const [activeCourse, setActiveCourse] = useState("");
   const [notes, setNotes] = useState([]);
-  const [downloads, setDownloads] = useState({}); // Track downloaded PDFs
+  const [downloaded, setDownloaded] = useState({});
+  const [viewerPdf, setViewerPdf] = useState(null); // in-app viewer
 
-  /* ---------------- FETCH ENROLLED COURSES ---------------- */
+  /* ---------------- COURSES ---------------- */
   useEffect(() => {
     if (!uid) return;
 
-    const fetchCourses = async () => {
-      const snap = await getDoc(doc(firestore, "users", uid));
+    getDoc(doc(firestore, "users", uid)).then(snap => {
       if (!snap.exists()) return;
-
       const enrolled = snap.data().enrolledCourses || [];
       setCourses(enrolled);
       if (enrolled.length) setActiveCourse(enrolled[0]);
-    };
-
-    fetchCourses();
+    });
   }, [uid]);
 
-  /* ---------------- FETCH NOTES COURSE-WISE ---------------- */
+  /* ---------------- NOTES ---------------- */
   useEffect(() => {
     if (!activeCourse) return;
 
-    const fetchNotes = async () => {
-      const q = query(
-        collection(firestore, "pdfs"),
-        where("courseTitle", "==", activeCourse),
-        where("deleted", "==", false),
-        orderBy("createdAt", "desc")
-      );
+    const q = query(
+      collection(firestore, "pdfs"),
+      where("courseTitle", "==", activeCourse),
+      where("deleted", "==", false),
+      orderBy("createdAt", "desc")
+    );
 
-      const snap = await getDocs(q);
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      setNotes(list);
-    };
-
-    fetchNotes();
+    getDocs(q).then(snap =>
+      setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
   }, [activeCourse]);
 
-  /* ---------------- HANDLE PDF CLICK + DOWNLOAD COUNT ---------------- */
-  const handleDownload = async (note) => {
-    const pdfRef = doc(firestore, "pdfs", note.id);
-    await updateDoc(pdfRef, { downloads: increment(1) });
+  /* ---------------- DOWNLOAD TICKS ---------------- */
+  useEffect(() => {
+    if (!uid) return;
 
-    // Mark as downloaded locally
-    setDownloads((prev) => ({ ...prev, [note.id]: true }));
+    getDocs(
+      collection(firestore, "users", uid, "downloadedNotes")
+    ).then(snap => {
+      const map = {};
+      snap.forEach(d => (map[d.id] = true));
+      setDownloaded(map);
+    });
+  }, [uid]);
 
-    // Open PDF in new tab
-    window.open(note.url, "_blank");
+  /* ---------------- VIEW PDF (IN APP, OFFLINE) ---------------- */
+  const viewPdf = (note) => {
+    setViewerPdf(note.url);
+  };
+
+  /* ---------------- DOWNLOAD ONLY ---------------- */
+  const downloadPdf = async (note) => {
+    await updateDoc(doc(firestore, "pdfs", note.id), {
+      downloads: increment(1),
+    });
+
+    await setDoc(
+      doc(firestore, "users", uid, "downloadedNotes", note.id),
+      {
+        title: note.title,
+        url: note.url,
+        downloadedAt: serverTimestamp(),
+      }
+    );
+
+    setDownloaded(prev => ({ ...prev, [note.id]: true }));
+
+    // real download (no open)
+    const a = document.createElement("a");
+    a.href = note.url;
+    a.download = note.title;
+    a.click();
   };
 
   return (
-    <div className="min-h-screen  pb-28 px-4 md:px-8 md:ml-[296px]">
-  <StudentNavbar />
+    <div className="min-h-screen pb-28 px-4 md:px-8 md:ml-[296px]">
+      <StudentNavbar />
 
-  <h1 className="text-2xl md:text-3xl font-bold  mt-6">
-    Notes & PDFs
-  </h1>
+      <h1 className="text-2xl font-bold mt-6">Notes & PDFs</h1>
 
-  {/* Course Tabs */}
-  <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
-    {courses.map((c) => (
-      <button
-        key={c}
-        onClick={() => setActiveCourse(c)}
-        className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition mb-4
-          ${activeCourse === c
-            ? "bg-red-600 text-white shadow-lg"
-            : "bg-white border border-gray-300 text-gray-700 hover:bg-red-50"
-          }`}
-      >
-        {c}
-      </button>
-    ))}
-  </div>
-
-  {/* Notes Grid */}
-  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-    {notes.map((n) => (
-      <div
-        key={n.id}
-        className="bg-white rounded-xl shadow p-4 flex items-center justify-between cursor-pointer hover:shadow-lg transition"
-      >
-        <div className="flex items-center gap-3" onClick={() => handleDownload(n)}>
-          <div className="w-12 h-12 rounded-lg bg-red-100 text-red-700 flex items-center justify-center">
-            <FileText size={20} />
-          </div>
-          <div className="flex flex-col">
-            <p className="font-semibold text-gray-900">{n.title}</p>
-            <p className="text-xs text-gray-500">
-              Downloads: {n.downloads || 0}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {downloads[n.id] && <Check size={18} className="text-green-600" />}
+      {/* Course Tabs */}
+      <div className="flex gap-2 mt-4 overflow-x-auto">
+        {courses.map(c => (
           <button
-            onClick={() => handleDownload(n)}
-            className="flex items-center gap-1 text-red-600 font-semibold text-sm hover:underline"
+            key={c}
+            onClick={() => setActiveCourse(c)}
+            className={`px-4 py-2 rounded-full text-sm
+              ${activeCourse === c
+                ? "bg-red-600 text-white"
+                : "bg-white border"
+              }`}
           >
-            <DownloadCloud size={16} />
-            Download
+            {c}
           </button>
-        </div>
+        ))}
       </div>
-    ))}
-  </div>
 
-  <StudentBottomNav />
-</div>
+      {/* Notes */}
+      <div className="mt-6 grid md:grid-cols-2 gap-4">
+        {notes.map(n => (
+          <div
+            key={n.id}
+            className="bg-white rounded-xl shadow p-4 flex justify-between"
+          >
+            <div className="flex gap-3">
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <FileText />
+              </div>
+              <p className="font-semibold">{n.title}</p>
+            </div>
 
+            <div className="flex items-center gap-3">
+              {downloaded[n.id] && <Check className="text-green-600" />}
+
+              <button
+                onClick={() => viewPdf(n)}
+                className="text-blue-600 text-sm flex gap-1"
+              >
+                <Eye size={16} /> View
+              </button>
+
+              <button
+                onClick={() => downloadPdf(n)}
+                className="text-red-600 text-sm flex gap-1"
+              >
+                <DownloadCloud size={16} /> Download
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* IN-APP PDF VIEWER */}
+      {viewerPdf && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex flex-col">
+          <button
+            onClick={() => setViewerPdf(null)}
+            className="text-white p-3 self-end"
+          >
+            Close ✕
+          </button>
+
+          <iframe
+            src={viewerPdf}
+            className="flex-1 bg-white"
+            title="PDF Viewer"
+          />
+        </div>
+      )}
+
+      <StudentBottomNav />
+    </div>
   );
 }

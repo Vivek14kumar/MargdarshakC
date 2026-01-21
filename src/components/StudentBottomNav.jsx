@@ -15,7 +15,7 @@ export default function StudentBottomNav() {
       <div className="flex justify-around py-2">
         <button
           onClick={() => navigate("/student/dashboard")}
-          className={`flex flex-col items-center text-xs ${activeClass("/dashboard")}`}
+          className={`flex flex-col items-center text-xs ${activeClass("/student/dashboard")}`}
         >
           <Home size={20} />
           Dashboard
@@ -23,7 +23,7 @@ export default function StudentBottomNav() {
 
         <button
           onClick={() => navigate("/student/courses")}
-          className={`flex flex-col items-center text-xs ${activeClass("/dashboard/courses")}`}
+          className={`flex flex-col items-center text-xs ${activeClass("/student/courses")}`}
         >
           <BookOpen size={20} />
           Courses
@@ -31,7 +31,7 @@ export default function StudentBottomNav() {
 
         <button
           onClick={() => navigate("/student/notes")}
-          className={`flex flex-col items-center text-xs ${activeClass("/dashboard/notes")}`}
+          className={`flex flex-col items-center text-xs ${activeClass("/student/notes")}`}
         >
           <FileText size={20} />
           Notes
@@ -39,7 +39,7 @@ export default function StudentBottomNav() {
 
         <button
           onClick={() => navigate("/student/results")}
-          className={`flex flex-col items-center text-xs ${activeClass("/dashboard/results")}`}
+          className={`flex flex-col items-center text-xs ${activeClass("/student/results")}`}
         >
           <BarChart2 size={20} />
           Result
@@ -47,7 +47,7 @@ export default function StudentBottomNav() {
 
         <button
           onClick={() => navigate("/student/profile")}
-          className={`flex flex-col items-center text-xs ${activeClass("/dashboard/profile")}`}
+          className={`flex flex-col items-center text-xs ${activeClass("/student/profile")}`}
         >
           <User size={20} />
           Profile

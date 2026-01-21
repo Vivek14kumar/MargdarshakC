@@ -9,64 +9,81 @@ export default function ProtectedRoute({
   role = "student", // "student" | "admin"
 }) {
   const { user, loading } = useAuth();
-  const [authorized, setAuthorized] = useState(null);
+  const [authorized, setAuthorized] = useState("checking");
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkAccess = async () => {
-      // Not logged in
+      // 🔄 Still checking auth
+      if (loading) return;
+
+      // ❌ Not logged in
       if (!user) {
-        setAuthorized(false);
+        if (isMounted) setAuthorized("unauthorized");
         return;
       }
 
-      // Email not verified
+      // ⚠️ Email not verified
       if (!user.emailVerified) {
-        setAuthorized("verify");
+        if (isMounted) setAuthorized("verify");
         return;
       }
 
-      // Admin role check
+      // 👑 Admin check
       if (role === "admin") {
-        const docRef = doc(firestore, "users", user.uid);
-        const snap = await getDoc(docRef);
+        try {
+          const snap = await getDoc(
+            doc(firestore, "users", user.uid)
+          );
 
-        if (!snap.exists() || !snap.data().isAdmin) {
-          setAuthorized(false);
+          if (!snap.exists() || !snap.data()?.isAdmin) {
+            if (isMounted) setAuthorized("unauthorized");
+            return;
+          }
+        } catch (err) {
+          console.error("Admin check failed", err);
+          if (isMounted) setAuthorized("unauthorized");
           return;
         }
       }
 
-      setAuthorized(true);
+      // ✅ Authorized
+      if (isMounted) setAuthorized("authorized");
     };
 
-    if (!loading) checkAccess();
+    checkAccess();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, loading, role]);
 
-  // ⏳ Loading state
-  if (loading || authorized === null) {
+  /* ================= UI STATES ================= */
+
+  // ⏳ Loading (important for PWA/TWA cold start)
+  if (loading || authorized === "checking") {
     return (
-      <div className="h-screen flex items-center justify-center">
+      <div className="h-screen flex items-center justify-center text-gray-600">
         Checking authentication...
       </div>
     );
   }
 
-  // 🚫 Not logged in or unauthorized
-  if (authorized === false) {
-    return (
-      <Navigate
-        to={role === "admin" ? "/login" : "/login"}
-        replace
-      />
-    );
+  // 🚫 Unauthorized
+  if (authorized === "unauthorized") {
+    return <Navigate to="/login" replace />;
   }
 
-  
-  // ⚠️ Email not verified
+  // ⚠️ Email verification required
   if (authorized === "verify") {
     return (
       <Navigate
-        to={role === "admin" ? "/verify-email" : "/student/verify-email"}
+        to={
+          role === "admin"
+            ? "/verify-email"
+            : "/student/verify-email"
+        }
         replace
       />
     );
