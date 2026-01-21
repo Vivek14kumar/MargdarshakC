@@ -17,7 +17,10 @@ import Contact from "./pages/Contact";
 /* Auth Pages */
 import Login from "./pages/auth/LoginPage";
 import Signup from "./pages/auth/Signup";
+import AppLogin from "./pages/app/auth/AppLogin";
+import AppSignup from "./pages/app/auth/AppSignup";
 import ForgotPassword from "./pages/auth/ForgotPassword";
+import AppForgotPassword from "./pages/app/auth/AppForgotPassword";
 import AdminSignup from "./pages/auth/AdminSignup";
 import VerifyEmail from "./pages/auth/VerifyEmail";
 
@@ -122,8 +125,9 @@ export default function App() {
   />
 </Route>
 
-<Route path="/login" element={<Login />} />
-<Route path="/signup" element={<Signup />} />
+<Route path="/app/login" element={<AppLogin />} />
+<Route path="/app/signup" element={<AppSignup />} />
+<Route path="/app/forgot-password" element={<AppForgotPassword />} />
 
         {/* ========= BACKWARD COMPAT ========= 
         <Route path="/dashboard/*" element={<Navigate to="/student/dashboard" replace />} />

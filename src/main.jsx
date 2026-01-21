@@ -11,10 +11,11 @@ createRoot(document.getElementById("root")).render(
 
 // ✅ Always register service worker
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/service-worker.js")
-      .then(() => console.log("PWA Service Worker registered"))
-      .catch(err => console.error("SW registration failed", err));
-  });
+  if (window.location.pathname.startsWith("/app")) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/app/service-worker.js", {
+        scope: "/app/"
+      });
+    });
+  }
 }
