@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate  } from "react-router-dom";
 import ScrollToTop from "./components/ScrollToTop";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UserProtected from "./components/UserProtected";
+import Gallery from "./components/Photogallery";
 
 /* Layouts */
 import StudentLayout from "./layout/StudentLayout";
@@ -13,6 +14,7 @@ import About from "./pages/About";
 import CoursesPage from "./pages/CoursesPage";
 import CourseDetail from "./pages/CourseDetail";
 import Contact from "./pages/Contact";
+
 
 /* Auth Pages */
 import Login from "./pages/auth/LoginPage";
@@ -51,6 +53,7 @@ export default function App() {
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/courses/:slug" element={<CourseDetail />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/gallery" element={<Gallery/>}/>
 
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

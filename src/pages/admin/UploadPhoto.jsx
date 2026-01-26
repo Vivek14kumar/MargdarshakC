@@ -1,10 +1,10 @@
-// UploadPhotos.jsx
+// src/pages/admin/UploadPhotos.jsx
 import { useDropzone } from "react-dropzone";
 import { useEffect, useState } from "react";
 import { firestore } from "../../firebaseConfig"; // Your Firebase config
-import { collection, addDoc, getDocs, orderBy, query, doc, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, orderBy, query, doc } from "firebase/firestore";
 
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const BASE = import.meta.env.VITE_API_URL || "/.netlify/functions";
 
 export default function UploadPhotos() {
   const [files, setFiles] = useState([]); // local dropzone previews
@@ -12,6 +12,7 @@ export default function UploadPhotos() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState({});
   const [success, setSuccess] = useState(false);
+  const [deletingId, setDeletingId] = useState(null); // track deletion
 
   // Load previously uploaded photos from Firebase
   const loadPhotos = async () => {
@@ -31,7 +32,7 @@ export default function UploadPhotos() {
 
   // Upload a single file to Cloudinary + save metadata in Firebase
   const uploadFile = async (file) => {
-    const sign = await fetch(`${BASE}/api/cloudinary/sign?folder=gallery`).then(r => r.json());
+    const sign = await fetch(`/.netlify/functions/sign?folder=gallery`).then((r) => r.json());
 
     const formData = new FormData();
     formData.append("file", file);
@@ -57,7 +58,7 @@ export default function UploadPhotos() {
         const data = JSON.parse(xhr.responseText);
         if (!data.public_id) return reject("Upload failed");
 
-        // Save metadata in Firebase
+        // Save metadata in Firestore
         await addDoc(collection(firestore, "photos"), {
           title: file.name,
           url: data.secure_url,
@@ -102,17 +103,33 @@ export default function UploadPhotos() {
     onDrop,
   });
 
-  // Delete photo from Firebase + Cloudinary
+  // Delete photo from Cloudinary + Firestore
   const deletePhoto = async (photo) => {
-    if (!window.confirm("Delete this photo?")) return;
+    if (!window.confirm("Delete this photo permanently?")) return;
+
+    setDeletingId(photo.id);
+
     try {
-      // Delete from backend
-      await fetch(`${BASE}/api/photos/${photo.id}`, { method: "DELETE" });
-      // Remove locally
+      const res = await fetch(`${BASE}/delete-photo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoId: photo.id,
+          publicId: photo.publicId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+
+      // Firestore onSnapshot or reload
       setUploadedPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      console.log("Deleted photo:", photo.title);
     } catch (err) {
       console.error(err);
       alert("Failed to delete photo");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -174,9 +191,12 @@ export default function UploadPhotos() {
                 </div>
                 <button
                   onClick={() => deletePhoto(photo)}
-                  className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700"
+                  disabled={deletingId === photo.id}
+                  className={`absolute top-1 right-1 text-xs px-2 py-1 rounded font-medium text-white ${
+                    deletingId === photo.id ? "bg-gray-500 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                  }`}
                 >
-                  Delete
+                  {deletingId === photo.id ? "Deleting..." : "Delete"}
                 </button>
               </div>
             ))}

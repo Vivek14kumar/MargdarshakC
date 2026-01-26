@@ -5,16 +5,8 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification
 } from "firebase/auth";
-import { auth, firestore } from "../../firebaseConfig";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  setDoc,
-  serverTimestamp
-} from "firebase/firestore";
+import { auth } from "../../firebaseConfig";
+import axios from "axios";
 import logo from "../../assets/images/logo.png";
 
 export default function AdminSignup() {
@@ -32,20 +24,7 @@ export default function AdminSignup() {
     const mobile = e.target.mobile.value.trim();
 
     try {
-      // ✅ CHECK IF ADMIN ALREADY EXISTS (SAFE QUERY)
-      const q = query(
-        collection(firestore, "users"),
-        where("isAdmin", "==", true)
-      );
-      const adminSnap = await getDocs(q);
-
-      if (!adminSnap.empty) {
-        alert("❌ Admin already exists. Only one admin is allowed.");
-        setLoading(false);
-        return;
-      }
-
-      // ✅ CREATE AUTH USER
+      // ✅ Create Firebase Auth user
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -54,18 +33,19 @@ export default function AdminSignup() {
 
       const user = userCredential.user;
 
-      // ✅ SAVE ADMIN DATA (MATCHES ProtectedRoute)
-      await setDoc(doc(firestore, "users", user.uid), {
-        name,
-        email,
-        mobile,
-        isAdmin: true,
-        role: "admin",
-        createdAt: serverTimestamp()
+      // ✅ Send verification email (IMPORTANT)
+      await sendEmailVerification(user, {
+        url: "http://localhost:5173/verify-email",
+        handleCodeInApp: true
       });
 
-      // ✅ SEND EMAIL VERIFICATION
-      await sendEmailVerification(user);
+      // ✅ Call Netlify serverless function
+      await axios.post("/.netlify/functions/adminRegister", {
+        uid: user.uid,
+        name,
+        email,
+        mobile
+      });
 
       alert("✅ Admin created! Please verify your email.");
       nav("/verify-email");
@@ -73,12 +53,14 @@ export default function AdminSignup() {
     } catch (err) {
       console.error(err);
 
-      if (err.code === "auth/email-already-in-use") {
-        alert("❌ Email already in use. Please login.");
+      if (err.response?.data?.error) {
+        alert("❌ " + err.response.data.error);
+      } else if (err.code === "auth/email-already-in-use") {
+        alert("❌ Email already in use.");
       } else if (err.code === "auth/weak-password") {
         alert("❌ Password must be at least 6 characters.");
       } else {
-        alert("❌ Signup failed. Check console.");
+        alert("❌ Signup failed.");
       }
     } finally {
       setLoading(false);
@@ -100,21 +82,21 @@ export default function AdminSignup() {
       <div className="relative z-10 flex items-center justify-center px-6">
         <form
           onSubmit={submit}
-          className="w-full max-w-sm bg-white/80 rounded-2xl shadow-2xl p-8"
+          className="w-full max-w-sm bg-white/80 rounded-2xl shadow-2xl p-8 space-y-4"
         >
-          <h2 className="text-2xl font-semibold mb-4">Admin Signup</h2>
+          <h2 className="text-2xl font-semibold">Admin Signup</h2>
 
           <input name="name" required placeholder="Full Name" className="input" />
           <input name="email" type="email" required placeholder="Email" className="input" />
           <input name="mobile" required placeholder="Mobile Number" className="input" />
 
-          <div className="relative mb-4">
+          <div className="relative">
             <input
               name="password"
               type={showPassword ? "text" : "password"}
               required
               placeholder="Password"
-              className="input"
+              className="input pr-10"
             />
             <span
               onClick={() => setShowPassword(!showPassword)}

@@ -115,7 +115,7 @@ export default function DashboardHome() {
         </Grid4>
       </Section>
 
-      {/* ================= ROW 2 ================= */}
+      {/* ================= ROW 2 ================= 
       <Section title="Engagement">
         <Grid4>
           <Stat
@@ -130,7 +130,7 @@ export default function DashboardHome() {
           />
         </Grid4>
       </Section>
-
+        */}
       {/* ================= ROW 3 ================= */}
       <Section title="Students Enrolled (Course Wise)">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -121,11 +121,11 @@ export default function StudentNotifications() {
     await deleteNotification(n.id);
 
     if (n.type === "notes") {
-      navigate(`/courses/${n.courseSlug}/notes`);
+      navigate(`/student/notes`);
     } else if (n.type === "result") {
-      navigate(`/courses/${n.courseSlug}/results`);
+      navigate(`/student/results`);
     } else if (n.type === "course") {
-      navigate(`/courses/${n.courseSlug}`);
+      navigate(`/student/courses`);
     }
   };
 

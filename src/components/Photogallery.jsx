@@ -1,20 +1,35 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  limit as fbLimit,
+} from "firebase/firestore";
 import { firestore } from "../firebaseConfig";
+import { Link } from "react-router-dom";
 
-export default function PhotoGallery() {
+export default function PhotoGallery({ limit }) {
   const [galleryImages, setGalleryImages] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchGallery() {
       try {
-        const q = query(
+        const baseQuery = query(
           collection(firestore, "photos"),
           orderBy("createdAt", "desc")
         );
 
-        const snap = await getDocs(q);
+        const finalQuery = limit
+          ? query(
+              collection(firestore, "photos"),
+              orderBy("createdAt", "desc"),
+              fbLimit(limit)
+            )
+          : baseQuery;
+
+        const snap = await getDocs(finalQuery);
 
         const data = snap.docs.map((doc) => ({
           id: doc.id,
@@ -30,7 +45,7 @@ export default function PhotoGallery() {
     }
 
     fetchGallery();
-  }, []);
+  }, [limit]);
 
   return (
     <section className="bg-gradient-to-b from-slate-50 to-white py-16 px-4 mt-10">
@@ -61,14 +76,14 @@ export default function PhotoGallery() {
                 className="group relative overflow-hidden rounded-xl shadow-xl bg-white"
               >
                 <img
-                  src={img.url}          
+                  src={img.url}
                   alt={img.title || "Gallery image"}
                   loading="lazy"
                   className="w-full h-60 object-cover
                   transform group-hover:scale-110 transition duration-500"
                 />
 
-                {/* Overlay */}
+                {/* Overlay 
                 {img.title && (
                   <div
                     className="absolute inset-0 bg-black/40
@@ -79,7 +94,7 @@ export default function PhotoGallery() {
                       {img.title}
                     </h3>
                   </div>
-                )}
+                )}*/}
               </div>
             ))}
           </div>
@@ -89,6 +104,19 @@ export default function PhotoGallery() {
         {!loading && galleryImages.length === 0 && (
           <p className="text-gray-500">No photos available</p>
         )}
+
+        {/* View All Button (Home only) */}
+        {limit && galleryImages.length > 0 && (
+          <div className="mt-12">
+            <Link
+              to="/gallery"
+              className="inline-block text-red-600 font-semibold hover:underline"
+            >
+              View Full Gallery →
+            </Link>
+          </div>
+        )}
+
       </div>
     </section>
   );

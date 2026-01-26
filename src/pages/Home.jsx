@@ -19,10 +19,10 @@ export default function Home() {
     />
 
       <Hero />
-      <CoursesPage />
+      <CoursesPage limit={4}/>
       <WhyChooseUs />
       <Testimonials />
-      <PhotoGallery/>
+      <PhotoGallery limit={6}/>
       <CTA />
       <YouTubeGallery />  {/* No need to pass videos */}
     </>

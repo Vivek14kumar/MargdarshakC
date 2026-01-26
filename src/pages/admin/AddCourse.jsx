@@ -1,12 +1,12 @@
 import { useForm, useFieldArray } from "react-hook-form";
-import {
+/*import {
   collection,
   addDoc,
   serverTimestamp,
   getDocs,
   query,
   where
-} from "firebase/firestore";
+} from "firebase/firestore";*/
 import { firestore } from "../../firebaseConfig";
 import CourseTable from "./CourseTable";
 import useAuth from "../../hooks/userAuth";
@@ -44,7 +44,7 @@ export default function AddCourseForm() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
 
-  /* ================= NOTIFY STUDENTS ================= */
+  /* ================= NOTIFY STUDENTS ================= 
   const notifyStudents = async (courseTitle, courseSlug) => {
   const usersSnap = await getDocs(
     query(collection(firestore, "users"), where("role", "==", "student"))
@@ -71,33 +71,35 @@ export default function AddCourseForm() {
   );
 
   await Promise.all(batch);
-};
+};*/
 
 
   const onSubmit = async (data) => {
-    try {
-      const slug = generateSlug(data.title);
-
-      await addDoc(collection(firestore, "courses"), {
-        title: data.title,
-        desc: data.desc,
-        duration: data.duration,
-        highlight: data.highlight || "",
-        slug,
-        features: data.features.filter((f) => f.text.trim() !== ""),
+  try {
+    const res = await fetch("/.netlify/functions/addCourse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...data,
         uid: user.uid,
-        createdAt: serverTimestamp()
-      });
+      }),
+    });
 
-      // ✅ Send notification to all students
-      await notifyStudents(data.title, slug);
+    const result = await res.json();
 
-      reset();
-      console.log("Course added");
-    } catch (err) {
-      console.error("Error:", err);
+    if (!res.ok) {
+      alert(result.message || "Failed to add course");
+      return;
     }
-  };
+
+    reset();
+    console.log("Course added:", result.courseId);
+  } catch (err) {
+    console.error("Error:", err);
+    alert("Server error");
+  }
+};
+
 
   return (
     <div className="w-full space-y-6">

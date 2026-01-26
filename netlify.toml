@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"   # use "build" if CRA
+  functions = "netlify/functions"
+
+[dev]
+  framework = "vite" # or "create-react-app"

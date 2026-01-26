@@ -7,12 +7,7 @@ import {
 } from "firebase/auth";
 import {
   collection,
-  getDocs,
-  query,
-  where,
-  doc,
-  setDoc,
-  serverTimestamp
+  getDocs
 } from "firebase/firestore";
 import { auth, firestore } from "../../firebaseConfig";
 import logo from "../../assets/images/logo.png";
@@ -45,7 +40,7 @@ export default function StudentSignup() {
     if (/[^A-Za-z0-9]/.test(password)) score++;
 
     if (score <= 1) setPasswordStrength("Weak");
-    else if (score === 2 || score === 3) setPasswordStrength("Medium");
+    else if (score <= 3) setPasswordStrength("Medium");
     else setPasswordStrength("Strong");
   }, [password]);
 
@@ -63,13 +58,6 @@ export default function StudentSignup() {
     };
     fetchCourses();
   }, []);
-
-  /* ================= DUPLICATE CHECK ================= */
-  const fieldExists = async (field, value) => {
-    const q = query(collection(firestore, "users"), where(field, "==", value));
-    const snap = await getDocs(q);
-    return !snap.empty;
-  };
 
   /* ================= SUBMIT ================= */
   const submit = async (e) => {
@@ -102,16 +90,6 @@ export default function StudentSignup() {
         return;
       }
 
-      if (await fieldExists("email", email)) {
-        setError("This email is already registered.");
-        return;
-      }
-
-      if (await fieldExists("mobile", mobile)) {
-        setError("This mobile number is already registered.");
-        return;
-      }
-
       /* ---------- Firebase Auth ---------- */
       const userCred = await createUserWithEmailAndPassword(
         auth,
@@ -121,16 +99,25 @@ export default function StudentSignup() {
 
       await sendEmailVerification(userCred.user);
 
-      /* ---------- Firestore ---------- */
-      await setDoc(doc(firestore, "users", userCred.user.uid), {
-        name,
-        email,
-        mobile,
-        role: "student",
-        emailVerified: false,
-        enrolledCourses: selectedCourse ? [selectedCourse] : [],
-        createdAt: serverTimestamp()
+      /* ---------- Serverless (SECURE DB WRITE) ---------- */
+      const res = await fetch("/.netlify/functions/studentRegister", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: userCred.user.uid,
+          name,
+          email,
+          mobile,
+          course: selectedCourse
+        })
       });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Registration failed");
+        return;
+      }
 
       setShowVerifyMsg(true);
 

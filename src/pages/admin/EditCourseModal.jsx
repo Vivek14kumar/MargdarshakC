@@ -1,26 +1,38 @@
 import { X } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../../firebaseConfig";
+import useAuth from "../../hooks/userAuth";
 
 export default function EditCourseModal({ course, onClose, onSaved }) {
+  const { user } = useAuth();
+
   const save = async (e) => {
     e.preventDefault();
 
     try {
-      await updateDoc(doc(db, "courses", course.id), {
-        title: e.target.title.value,
-        desc: e.target.desc.value,
-        duration: e.target.duration.value,
-        highlight: e.target.highlight.value || "",
-        slug: e.target.title.value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-"),
+      const res = await fetch("/.netlify/functions/updateCourse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId: course.id,
+          title: e.target.title.value,
+          desc: e.target.desc.value,
+          duration: e.target.duration.value,
+          highlight: e.target.highlight.value,
+          uid: user.uid,
+        }),
       });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        alert(result.message || "Update failed");
+        return;
+      }
 
       onSaved();
       onClose();
     } catch (err) {
       console.error("Error updating course:", err);
+      alert("Server error");
     }
   };
 

@@ -38,7 +38,7 @@ export default function TopNav({ onMenuClick }) {
             from-red-500 to-red-700 text-white
             flex items-center justify-center font-semibold"
           >
-            MD
+            MD.
           </div>
         </div>
 

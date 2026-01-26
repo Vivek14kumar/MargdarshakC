@@ -1,4 +1,4 @@
-import admin from "firebase-admin";
+/*import admin from "firebase-admin";
 import fs from "fs";
 import path from "path";
 
@@ -10,4 +10,4 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-export default admin;
+export default admin;*/

@@ -2,12 +2,16 @@
   "name": "Margdarshak Student App",
   "short_name": "Margdarshak",
   "description": "Student learning portal for courses, notes, results and profile management",
+
   "start_url": "/app/login",
-  "scope": "/app/",
+  "scope": "/",
+
   "display": "standalone",
   "orientation": "portrait",
+
   "background_color": "#ffffff",
   "theme_color": "#dc2626",
+
   "icons": [
     {
       "src": "/icons/icon-192.png",

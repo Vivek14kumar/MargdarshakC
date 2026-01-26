@@ -1,5 +1,4 @@
-// src/pages/admin/UploadNotes.jsx
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   collection,
   addDoc,
@@ -16,6 +15,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { firestore } from "../../firebaseConfig";
+import {FaFilePdf, FaSpinner} from "react-icons/fa";
 
 export default function UploadNotes() {
   const [courses, setCourses] = useState([]);
@@ -24,6 +24,8 @@ export default function UploadNotes() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [success, setSuccess] = useState(false);
+
+  const [deletingId, setDeletingId] = useState(null);
 
   /* PAGINATION */
   const PAGE_SIZE = 5;
@@ -36,8 +38,7 @@ export default function UploadNotes() {
   useEffect(() => {
     const fetchCourses = async () => {
       const snap = await getDocs(collection(firestore, "courses"));
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setCourses(list);
+      setCourses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     };
     fetchCourses();
   }, []);
@@ -57,10 +58,7 @@ export default function UploadNotes() {
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setPdfs(list);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMore(snap.docs.length === PAGE_SIZE);
@@ -70,7 +68,7 @@ export default function UploadNotes() {
   }, [selectedCourse]);
 
   /* ===============================
-     LOAD MORE (PAGINATION)
+     LOAD MORE
   =============================== */
   const loadMore = async () => {
     if (!lastDoc || !hasMore) return;
@@ -86,47 +84,44 @@ export default function UploadNotes() {
 
     const snap = await getDocs(q);
 
-    const more = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    setPdfs((prev) => [
+      ...prev,
+      ...snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    ]);
 
-    setPdfs((prev) => [...prev, ...more]);
     setLastDoc(snap.docs[snap.docs.length - 1] || null);
     setHasMore(snap.docs.length === PAGE_SIZE);
   };
 
   /* ===============================
-     NOTIFY STUDENTS (FRONTEND VERSION)
+     NOTIFY STUDENTS
   =============================== */
   const notifyStudents = async (noteTitle) => {
-  const usersSnap = await getDocs(
-    query(collection(firestore, "users"), where("role", "==", "student"))
-  );
-
-  const promises = [];
-
-  usersSnap.forEach((user) => {
-    promises.push(
-      addDoc(collection(firestore, "notifications"), {
-        uid: user.id,
-        type: "notes",
-        title: "New Notes Uploaded",
-        message: `${noteTitle} notes are now available`,
-        courseTitle: selectedCourse, // ✅ STRING
-        read: false,
-        createdAt: serverTimestamp(),
-      })
+    const usersSnap = await getDocs(
+      query(collection(firestore, "users"), where("role", "==", "student"))
     );
-  });
 
-  await Promise.all(promises);
-};
+    const jobs = [];
 
+    usersSnap.forEach((u) => {
+      jobs.push(
+        addDoc(collection(firestore, "notifications"), {
+          uid: u.id,
+          type: "notes",
+          title: "New Notes Uploaded",
+          message: `${noteTitle} notes are now available`,
+          courseTitle: selectedCourse,
+          read: false,
+          createdAt: serverTimestamp(),
+        })
+      );
+    });
 
-  
+    await Promise.all(jobs);
+  };
+
   /* ===============================
-     UPLOAD PDF
+     UPLOAD PDF (SERVERLESS)
   =============================== */
   const submit = async (e) => {
     e.preventDefault();
@@ -141,11 +136,13 @@ export default function UploadNotes() {
     setProgress(0);
 
     try {
+      // 1️⃣ Get Cloudinary signature
       const sigRes = await fetch(
-        `http://localhost:5000/api/pdf/sign?folder=pdfs/${selectedCourse}`
+        `/.netlify/functions/sign?folder=pdfs/${selectedCourse}`
       );
       const sig = await sigRes.json();
 
+      // 2️⃣ Upload to Cloudinary
       const formData = new FormData();
       formData.append("file", file);
       formData.append("folder", `pdfs/${selectedCourse}`);
@@ -170,7 +167,7 @@ export default function UploadNotes() {
         const res = JSON.parse(xhr.responseText);
         if (!res.public_id) throw new Error("Upload failed");
 
-        // 1️⃣ Add PDF to Firestore
+        // 3️⃣ Save PDF in Firestore
         await addDoc(collection(firestore, "pdfs"), {
           title,
           url: res.secure_url,
@@ -178,10 +175,10 @@ export default function UploadNotes() {
           courseTitle: selectedCourse,
           downloads: 0,
           deleted: false,
-          createdAt: new Date(),
+          createdAt: serverTimestamp(),
         });
 
-        // 2️⃣ Notify all students
+        // 4️⃣ Notify students
         await notifyStudents(title);
 
         setSuccess(true);
@@ -192,76 +189,83 @@ export default function UploadNotes() {
       };
 
       xhr.onerror = () => {
-        alert("Upload error");
+        alert("Upload failed");
         setLoading(false);
-        setProgress(0);
       };
 
       xhr.send(formData);
     } catch (err) {
-      console.error("Upload failed:", err);
+      console.error("Upload error:", err);
       setLoading(false);
-      setProgress(0);
     }
   };
 
   /* ===============================
-     DELETE PDF
+     DELETE PDF (SERVERLESS)
   =============================== */
-  const removePDF = async (pdf) => {
-    if (!window.confirm("Delete this PDF?")) return;
+const removePDF = async (pdf) => {
+  if (!window.confirm("Delete this PDF permanently?")) return;
 
-    try {
-      const res = await fetch(`http://localhost:5000/api/pdf/${pdf.id}`, {
-        method: "DELETE",
-      });
+  setDeletingId(pdf.id); // 🔄 start loading
 
-      if (!res.ok) throw new Error("Delete failed");
+  try {
+    const res = await fetch("/.netlify/functions/delete-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        pdfId: pdf.id,
+        publicId: pdf.publicId,
+        resourceType: pdf.resourceType || "raw",
+      }),
+    });
 
-      setPdfs((prev) => prev.filter((p) => p.id !== pdf.id));
-    } catch (err) {
-      console.error(err);
-      alert("Delete failed");
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Delete failed");
     }
-  };
+
+    console.log("Deleted:", pdf.title);
+    // ✅ Firestore onSnapshot will auto-remove from UI
+  } catch (err) {
+    console.error(err);
+    alert("Delete failed. Please try again.");
+  } finally {
+    setDeletingId(null); // 🔄 stop loading
+  }
+};
+
+
 
   /* ===============================
      DOWNLOAD COUNTER
   =============================== */
   const incrementDownload = async (pdfId) => {
-    try {
-      await updateDoc(doc(firestore, "pdfs", pdfId), {
-        downloads: increment(1),
-      });
-    } catch (err) {
-      console.error(err);
-    }
+    await updateDoc(doc(firestore, "pdfs", pdfId), {
+      downloads: increment(1),
+    });
   };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-4">
       {/* SELECT COURSE */}
-      <div className="bg-white p-4 rounded-xl shadow">
-        <select
-          value={selectedCourse}
-          onChange={(e) => setSelectedCourse(e.target.value)}
-          className="border rounded px-3 py-2 w-full"
-        >
-          <option value="">-- Select Course --</option>
-          {courses.map((course) => (
-            <option key={course.id} value={course.title}>
-              {course.title}
-            </option>
-          ))}
-        </select>
-      </div>
+      <select
+        value={selectedCourse}
+        onChange={(e) => setSelectedCourse(e.target.value)}
+        className="border rounded px-3 py-2 w-full"
+      >
+        <option value="">-- Select Course --</option>
+        {courses.map((c) => (
+          <option key={c.id} value={c.title}>
+            {c.title}
+          </option>
+        ))}
+      </select>
 
       {/* UPLOAD FORM */}
-      <div className="bg-white shadow rounded-xl p-6">
-        <h2 className="text-xl font-semibold mb-4">Upload Study Notes</h2>
-
+      <div className="bg-white p-6 rounded shadow">
         {success && (
-          <p className="text-green-600 text-sm mb-3 text-center">
+          <p className="text-green-600 text-center mb-2">
             ✅ PDF uploaded successfully
           </p>
         )}
@@ -269,17 +273,12 @@ export default function UploadNotes() {
         <form onSubmit={submit} className="space-y-4">
           <input
             name="title"
-            required
             placeholder="PDF title"
-            className="w-full border rounded px-3 py-2"
+            required
+            className="w-full border px-3 py-2 rounded"
           />
 
-          <input
-            type="file"
-            name="pdfFile"
-            accept="application/pdf"
-            required
-          />
+          <input type="file" name="pdfFile" accept="application/pdf" required />
 
           <button
             disabled={loading}
@@ -289,7 +288,7 @@ export default function UploadNotes() {
           </button>
 
           {progress > 0 && (
-            <div className="w-full bg-gray-200 h-2 rounded">
+            <div className="bg-gray-200 h-2 rounded">
               <div
                 className="bg-blue-600 h-2 rounded"
                 style={{ width: `${progress}%` }}
@@ -300,28 +299,19 @@ export default function UploadNotes() {
       </div>
 
       {/* PDF LIST */}
-      <div className="bg-white shadow rounded p-6">
+      <div className="bg-white p-6 rounded shadow">
         {pdfs.length === 0 ? (
-          <p className="text-center text-gray-500 text-sm">
-            No PDFs uploaded for this course
-          </p>
+          <p className="text-center text-gray-500">No PDFs found</p>
         ) : (
           <>
             {pdfs.map((pdf) => (
               <div
                 key={pdf.id}
-                className="flex justify-between items-center border p-3 rounded mb-2"
+                className="border p-3 rounded mb-2 flex justify-between"
               >
                 <div>
-                  <p className="font-medium">{pdf.title}</p>
+                  <p className="font-semibold">{pdf.title}</p>
                   <p className="text-xs text-gray-500">
-                    {new Date(
-                      pdf.createdAt?.seconds
-                        ? pdf.createdAt.seconds * 1000
-                        : pdf.createdAt
-                    ).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-400">
                     Downloads: {pdf.downloads || 0}
                   </p>
                 </div>
@@ -330,19 +320,31 @@ export default function UploadNotes() {
                   <a
                     href={pdf.url}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    rel="noreferrer"
                     onClick={() => incrementDownload(pdf.id)}
-                    className="text-blue-600 underline"
+                    className="flex items-center gap-1 text-blue-600 text-sm font-medium hover:underline"
                   >
-                    Preview / Download
+                    <FaFilePdf className="text-blue-600 text-base" />
+                    <span>Open</span>
                   </a>
 
                   <button
                     onClick={() => removePDF(pdf)}
-                    className="text-red-600"
+                    disabled={deletingId === pdf.id}
+                    className={`text-red-600 flex items-center gap-2 ${
+                      deletingId === pdf.id ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
                   >
-                    Delete
+                    {deletingId === pdf.id ? (
+                      <>
+                        <span className="animate-spin"><FaSpinner/></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      "Delete"
+                    )}
                   </button>
+
                 </div>
               </div>
             ))}
@@ -350,7 +352,7 @@ export default function UploadNotes() {
             {hasMore && (
               <button
                 onClick={loadMore}
-                className="w-full mt-3 border border-blue-600 text-blue-600 py-2 rounded hover:bg-blue-50"
+                className="w-full border py-2 rounded text-blue-600"
               >
                 Load More
               </button>

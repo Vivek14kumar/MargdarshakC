@@ -24,6 +24,10 @@ export default function CourseTable() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const onCourseSaved = () => {
+  setEditCourse(null);
+};
+
   /* ===============================
      REAL-TIME FIRST PAGE
   =============================== */
@@ -184,11 +188,13 @@ export default function CourseTable() {
 
       {/* EDIT MODAL */}
       {editCourse && (
-        <EditCourseModal
-          course={editCourse}
-          onClose={() => setEditCourse(null)}
-        />
-      )}
+  <EditCourseModal
+    course={editCourse}
+    onClose={() => setEditCourse(null)}
+    onSaved={onCourseSaved}
+  />
+)}
+
     </>
   );
 }

@@ -87,6 +87,11 @@ export default function Footer() {
                 Contact
               </Link>
             </li>
+            <li>
+              <Link to="/gallery" className="hover:text-red-500 transition">
+                Gallery
+              </Link>
+            </li>
           </ul>
 
           {/* Social Icons */}

@@ -37,7 +37,7 @@ export default function StudentCourses() {
 
     // Add course to enrolledCourses array
     await updateDoc(userRef, {
-      enrolledCourses: arrayUnion(course.id || course.title)
+      enrolledCourses: arrayUnion(course.title || course.id)
     });
 
     // Refresh userData

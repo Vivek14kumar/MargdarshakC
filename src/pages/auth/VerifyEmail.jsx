@@ -23,23 +23,24 @@ export default function VerifyEmail() {
   }, [cooldown]);
 
   const resend = async () => {
-    if (!user || cooldown > 0) return;
+  if (!user || cooldown > 0) return;
 
-    try {
-      setSending(true);
+  try {
+    setSending(true);
 
-      await sendEmailVerification(user, {
-        url: "https://yourdomain.com/login",
-      });
+    await sendEmailVerification(user, {
+      url: window.location.origin + "/login",
+    });
 
-      setSent(true);
-      setCooldown(COOLDOWN_TIME); // start cooldown
-    } catch (err) {
-      console.error("Resend failed:", err);
-    } finally {
-      setSending(false);
-    }
-  };
+    setSent(true);
+    setCooldown(COOLDOWN_TIME);
+  } catch (err) {
+    console.error("Resend failed:", err);
+  } finally {
+    setSending(false);
+  }
+};
+
 
   useEffect(() => {
   const interval = setInterval(async () => {

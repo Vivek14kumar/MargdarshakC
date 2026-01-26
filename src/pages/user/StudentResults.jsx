@@ -168,11 +168,11 @@ function ResultCard({ result, openResultPDF }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-md hover:shadow-lg p-5 transition flex flex-col gap-2">
-      {result.type === "manual" ? (
+      {result.type === "rank" ? (
         <>
           <p className="font-semibold">{result.studentName}</p>
           <p className="text-sm text-gray-600">
-            Subject: {result.subject}
+            Rank: <span className="font-bold">{result.rank}</span>
           </p>
           <p className="text-sm text-green-600 font-bold">
             Marks: {result.marks}
