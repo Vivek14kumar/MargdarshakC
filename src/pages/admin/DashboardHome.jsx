@@ -18,7 +18,8 @@ export default function DashboardHome() {
 
   const [stats, setStats] = useState(null);
   const [courseEnrollments, setCourseEnrollments] = useState({});
-  const [cloudinary, setCloudinary] = useState(null);
+  const [cloudinaryUsage, setCloudinaryUsage] = useState(null);
+
 
   useEffect(() => {
     async function loadDashboard() {
@@ -62,7 +63,7 @@ export default function DashboardHome() {
       try {
         const res = await fetch("/.netlify/functions/cloudinary-usage");
         const data = await res.json();
-        setCloudinary(data);
+        setCloudinaryUsage(data);
       } catch (err) {
         console.error("Cloudinary fetch error:", err);
       }
@@ -71,6 +72,22 @@ export default function DashboardHome() {
     loadDashboard();
     loadCloudinaryUsage();
   }, []);
+
+  const FREE_STORAGE_GB = 5;
+
+const usedGB = cloudinaryUsage?.total?.gb || 0;
+const remainingGB = Math.max(FREE_STORAGE_GB - usedGB, 0);
+const percentUsed = Math.min(
+  (usedGB / FREE_STORAGE_GB) * 100,
+  100
+);
+
+  const formatStorage = (item) => {
+  if (!item || item.bytes === 0) return "0 KB";
+  if (item.gb >= 1) return `${item.gb} GB`;
+  if (item.mb >= 1) return `${item.mb} MB`;
+  return `${(item.bytes / 1024).toFixed(2)} KB`;
+};
 
   const logout = async () => {
     await signOut(auth);
@@ -106,33 +123,70 @@ export default function DashboardHome() {
         </Grid4>
       </Section>
 
-{cloudinary && (
-  <Section title="Cloudinary Folder Storage">
-    <Grid4>
-      <Stat
-        icon={<FaImage />}
-        title="Gallery"
-        value={cloudinary.gallery}
-      />
-      <Stat
-        icon={<FaFilePdf />}
-        title="PDF"
-        value={cloudinary.pdfs}
-      />
-      <Stat
-        icon={<FaBook />}
-        title="Results"
-        value={cloudinary.results}
-      />
-      <Stat
-        icon={<FaCloud />}
-        title="Total Storage"
-        value={cloudinary.total}
-      />
-    </Grid4>
-  </Section>
-)}
+      {cloudinaryUsage && (
+        <Section title="Used Storage">
+          <Grid4>
+            <Stat
+              icon={<FaImage />}
+              title="Gallery"
+              value={formatStorage(cloudinaryUsage.gallery)}
+            />
+            <Stat
+              icon={<FaFilePdf />}
+              title="Notes"
+              value={formatStorage(cloudinaryUsage.pdfs)}
+            />
+            <Stat
+              icon={<FaBook />}
+              title="Results"
+              value={formatStorage(cloudinaryUsage.results)}
+            />
+            <Stat
+              icon={<FaCloud />}
+              title="Total Storage"
+              value={formatStorage(cloudinaryUsage.total)}
+            />
+          </Grid4>
+        </Section>
+      )}
 
+
+      {cloudinaryUsage && (
+        <Section title="Storage Plan">
+          <div className="bg-white rounded-2xl p-6 shadow space-y-4">
+      
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold text-gray-700">Free Plan</h3>
+              <span className="text-sm text-gray-500">5 GB Total</span>
+            </div>
+      
+            <p className="text-sm text-gray-600">
+              Used <b>{usedGB.toFixed(2)} GB</b> of{" "}
+              <b>{FREE_STORAGE_GB} GB</b>
+            </p>
+      
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-500
+                  ${percentUsed >= 80 ? "bg-red-600" : "bg-green-600"}`}
+                style={{ width: `${percentUsed}%` }}
+              />
+            </div>
+                
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">
+                {remainingGB.toFixed(2)} GB remaining
+              </span>
+                
+              {percentUsed >= 80 && (
+                <span className="text-red-600 font-semibold">
+                  ⚠ Storage almost full
+                </span>
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
       
 
       {/* COURSE ENROLLMENTS */}
@@ -161,6 +215,7 @@ export default function DashboardHome() {
     </>
   );
 }
+
 
 /* ================= REUSABLE ================= */
 
@@ -193,7 +248,7 @@ function Stat({ icon, title, value }) {
       </div>
       <div>
         <p className="text-gray-500 text-sm">{title}</p>
-        <h3 className="text-3xl font-bold text-gray-800">
+        <h3 className="text-xl font-bold text-gray-800">
           {value}
         </h3>
       </div>

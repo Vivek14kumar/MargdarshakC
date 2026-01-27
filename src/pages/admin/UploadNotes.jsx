@@ -121,84 +121,97 @@ export default function UploadNotes() {
   };
 
   /* ===============================
-     UPLOAD PDF (SERVERLESS)
-  =============================== */
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!selectedCourse) return alert("Select a course");
+   UPLOAD PDF (SERVERLESS) WITH SIZE LIMIT
+=============================== */
+const submit = async (e) => {
+  e.preventDefault();
+  if (!selectedCourse) return alert("Select a course");
 
-    const file = e.target.pdfFile.files[0];
-    const title = e.target.title.value;
+  const file = e.target.pdfFile.files[0];
+  const title = e.target.title.value;
 
-    if (!file) return alert("Select PDF");
+  if (!file) return alert("Select PDF");
 
-    setLoading(true);
-    setProgress(0);
+  // ✅ Check file size (10 MB = 10 * 1024 * 1024 bytes)
+  const MAX_SIZE = 10 * 1024 * 1024; 
+  if (file.size > MAX_SIZE) {
+    alert(
+      "PDF is too large! Maximum allowed size is 10 MB.\n\nTips:\n" +
+      "- Split the PDF into smaller parts (per chapter)\n" +
+      "- Compress images inside the PDF\n" +
+      "- Use online PDF compressors like SmallPDF or ILovePDF"
+    );
+    return;
+  }
 
-    try {
-      // 1️⃣ Get Cloudinary signature
-      const sigRes = await fetch(
-        `/.netlify/functions/sign?folder=pdfs/${selectedCourse}`
-      );
-      const sig = await sigRes.json();
+  setLoading(true);
+  setProgress(0);
 
-      // 2️⃣ Upload to Cloudinary
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", `pdfs/${selectedCourse}`);
-      formData.append("resource_type", "raw");
-      formData.append("api_key", sig.api_key);
-      formData.append("timestamp", sig.timestamp);
-      formData.append("signature", sig.signature);
+  try {
+    // 1️⃣ Get Cloudinary signature
+    const sigRes = await fetch(
+      `/.netlify/functions/sign?folder=pdfs/${selectedCourse}`
+    );
+    const sig = await sigRes.json();
 
-      const xhr = new XMLHttpRequest();
-      xhr.open(
-        "POST",
-        `https://api.cloudinary.com/v1_1/${sig.cloud_name}/auto/upload`
-      );
+    // 2️⃣ Upload to Cloudinary
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", `pdfs/${selectedCourse}`);
+    formData.append("resource_type", "raw");
+    formData.append("api_key", sig.api_key);
+    formData.append("timestamp", sig.timestamp);
+    formData.append("signature", sig.signature);
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          setProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+      "POST",
+      `https://api.cloudinary.com/v1_1/${sig.cloud_name}/auto/upload`
+    );
 
-      xhr.onload = async () => {
-        const res = JSON.parse(xhr.responseText);
-        if (!res.public_id) throw new Error("Upload failed");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        setProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
 
-        // 3️⃣ Save PDF in Firestore
-        await addDoc(collection(firestore, "pdfs"), {
-          title,
-          url: res.secure_url,
-          publicId: res.public_id,
-          courseTitle: selectedCourse,
-          downloads: 0,
-          deleted: false,
-          createdAt: serverTimestamp(),
-        });
+    xhr.onload = async () => {
+      const res = JSON.parse(xhr.responseText);
+      if (!res.public_id) throw new Error("Upload failed");
 
-        // 4️⃣ Notify students
-        await notifyStudents(title);
+      // 3️⃣ Save PDF in Firestore
+      await addDoc(collection(firestore, "pdfs"), {
+        title,
+        url: res.secure_url,
+        publicId: res.public_id,
+        courseTitle: selectedCourse,
+        downloads: 0,
+        deleted: false,
+        createdAt: serverTimestamp(),
+      });
 
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
-        setLoading(false);
-        setProgress(0);
-        e.target.reset();
-      };
+      // 4️⃣ Notify students
+      await notifyStudents(title);
 
-      xhr.onerror = () => {
-        alert("Upload failed");
-        setLoading(false);
-      };
-
-      xhr.send(formData);
-    } catch (err) {
-      console.error("Upload error:", err);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
       setLoading(false);
-    }
-  };
+      setProgress(0);
+      e.target.reset();
+    };
+
+    xhr.onerror = () => {
+      alert("Upload failed");
+      setLoading(false);
+    };
+
+    xhr.send(formData);
+  } catch (err) {
+    console.error("Upload error:", err);
+    setLoading(false);
+  }
+};
+
 
   /* ===============================
      DELETE PDF (SERVERLESS)

@@ -17,6 +17,7 @@
         "npm:@types/react@^19.2.5",
         "npm:@vitejs/plugin-react@^5.1.1",
         "npm:autoprefixer@^10.4.23",
+        "npm:axios@^1.13.2",
         "npm:bcrypt@6",
         "npm:cloudinary@^2.8.0",
         "npm:cors@^2.8.5",

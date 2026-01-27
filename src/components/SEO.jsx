@@ -1,5 +1,5 @@
 // src/components/SEO.jsx
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 
 export default function SEO({
   title = "Margdarshak Career Institute – Best Coaching in Muzaffarpur",

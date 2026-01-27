@@ -29,13 +29,10 @@ export default function CoursesPage({ limit }) {
 
   return (
     <>
-      {!limit && (
-        <SEO
-          title="Courses – Margdarshak Career Institute"
-          description="Explore CBSE, BSEB, NEET & JEE coaching courses."
-        />
-      )}
-
+    <SEO
+      title="Courses – Margdarshak Career Institute"
+      description="Explore CBSE, BSEB, NEET & JEE coaching courses."
+    />
       <section className="max-w-7xl mx-auto px-4 py-20">
         <div className="text-center mb-14">
           <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">

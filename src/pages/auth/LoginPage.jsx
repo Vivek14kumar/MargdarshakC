@@ -10,6 +10,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import logo from "../../assets/images/logo.webp";
+import SEO from "../../components/SEO";
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -116,6 +117,9 @@ export default function LoginPage() {
   };
 
   return (
+    <>
+    <SEO
+    title="LogIn – Margdarshak Career Institute"/>
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
 
       {/* Branding */}
@@ -194,5 +198,6 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+    </>
   );
 }

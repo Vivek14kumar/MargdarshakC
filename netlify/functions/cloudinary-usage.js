@@ -1,63 +1,112 @@
-import { v2 as cloudinary } from "cloudinary";
+import cloudinary from "cloudinary";
 
-const formatSize = (bytes) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(2)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-};
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const getFolderSize = async (folder) => {
+/* ================= HELPERS ================= */
+  const FREE_STORAGE_LIMIT_GB = 5;
+  const FREE_STORAGE_LIMIT_BYTES = FREE_STORAGE_LIMIT_GB * 1024 * 1024 * 1024;
+
+async function getFolderBytes(folderPath) {
   let totalBytes = 0;
   let nextCursor = null;
 
   do {
-    const res = await cloudinary.api.resources({
-      type: "upload",
-      prefix: folder,   // 🔥 folder name
-      max_results: 500,
-      next_cursor: nextCursor,
-    });
+    const res = await cloudinary.v2.search
+      .expression(`folder:${folderPath}/*`)
+      .max_results(500)
+      .next_cursor(nextCursor)
+      .execute();
 
-    res.resources.forEach(file => {
-      totalBytes += file.bytes || 0;
+    res.resources.forEach(r => {
+      totalBytes += r.bytes || 0;
     });
 
     nextCursor = res.next_cursor;
   } while (nextCursor);
 
   return totalBytes;
-};
+}
 
-export const handler = async () => {
+async function getRecursiveFolderBytes(baseFolder) {
+  let total = 0;
+
+  // bytes in root folder
+  total += await getFolderBytes(baseFolder);
+
+  // subfolders
+  const sub = await cloudinary.v2.api.sub_folders(baseFolder);
+
+  for (const f of sub.folders) {
+    total += await getRecursiveFolderBytes(f.path);
+  }
+
+  return total;
+}
+
+function format(bytes) {
+  const mb = bytes / (1024 * 1024);
+  const gb = bytes / (1024 * 1024 * 1024);
+
+  return {
+    bytes,
+    mb: +mb.toFixed(2),
+    gb: +gb.toFixed(4),
+  };
+}
+
+/* ================= NETLIFY FUNCTION ================= */
+
+export async function handler(event) {
   try {
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
-    });
-
-    // ✅ MATCH CLOUDINARY FOLDER STRUCTURE
-    const galleryBytes = await getFolderSize("Assets/gallery", "image");
-    const pdfBytes = await getFolderSize("Assets/pdfs", "raw");
-    const resultsBytes = await getFolderSize("Assets/results", "raw");
+    const galleryBytes = await getRecursiveFolderBytes("Gallery");
+    const pdfBytes = await getRecursiveFolderBytes("pdfs");
+    const resultsBytes = await getRecursiveFolderBytes("Results");
 
     const totalBytes = galleryBytes + pdfBytes + resultsBytes;
+
+    // 🚫 BLOCK uploads if limit exceeded
+    if (totalBytes >= FREE_STORAGE_LIMIT_BYTES) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({
+          error: "Storage limit exceeded",
+          limitGB: FREE_STORAGE_LIMIT_GB,
+          usedGB: +(totalBytes / (1024 ** 3)).toFixed(2),
+          message: "You have reached your 5 GB free storage limit. Please upgrade your plan.",
+        }),
+      };
+    }
+
+    // ✅ Only calculate & return usage if under limit
+    const gallery = format(galleryBytes);
+    const pdfs = format(pdfBytes);
+    const results = format(resultsBytes);
+    const total = format(totalBytes);
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        gallery: formatSize(galleryBytes),
-        pdf: formatSize(pdfBytes),
-        results: formatSize(resultsBytes),
-        total: formatSize(totalBytes),
+        gallery,
+        pdfs,
+        results,
+        total,
+        allowed: true,
       }),
     };
-  } catch (error) {
-    console.error("Folder usage error:", error);
+  } catch (err) {
+    console.error("Cloudinary usage error:", err);
+
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Failed to calculate folder usage" }),
+      body: JSON.stringify({
+        error: "Failed to calculate folder usage",
+        message: err.message,
+      }),
     };
   }
-};
+}
+

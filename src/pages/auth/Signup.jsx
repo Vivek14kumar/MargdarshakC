@@ -10,6 +10,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import { auth, firestore } from "../../firebaseConfig";
+import SEO from "../../components/SEO";
 import logo from "../../assets/images/logo.png";
 
 export default function StudentSignup() {
@@ -134,6 +135,9 @@ export default function StudentSignup() {
   };
 
   return (
+    <>
+    <SEO
+    title="SignUp – Margdarshak Career Institute"/>
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-gradient-to-br from-red-50 to-white">
 
       {/* ================= LEFT ================= */}
@@ -244,5 +248,6 @@ export default function StudentSignup() {
         </form>
       </div>
     </div>
+    </>
   );
 }

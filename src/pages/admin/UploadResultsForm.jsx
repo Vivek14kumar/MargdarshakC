@@ -151,63 +151,81 @@ export default function UploadResults() {
 
   /* ---------------- PDF RESULT ---------------- */
   const submitPDF = async (e) => {
-    e.preventDefault();
-    if (!selectedCourse) return alert("Select course");
+  e.preventDefault();
+  if (!selectedCourse) return alert("Select course");
 
-    setLoading(true);
+  const file = e.target.pdf.files[0];
+  if (!file) return alert("Select a PDF file");
+
+  const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+
+  // ✅ Check file size
+  if (file.size > MAX_SIZE) {
+    alert(
+      "⚠ PDF is too large!\n\n" +
+      "Maximum allowed size is 10 MB.\n\n" +
+      "Tips for uploading large PDFs:\n" +
+      "- Split the PDF into smaller parts (per chapter)\n" +
+      "- Compress images inside the PDF\n" +
+      "- Use online compressors like SmallPDF or ILovePDF"
+    );
+    return;
+  }
+
+  setLoading(true);
+  setProgress(0);
+
+  try {
+    const signRes = await fetch("/.netlify/functions/sign?folder=results");
+    const sign = await signRes.json();
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("api_key", sign.api_key);
+    formData.append("timestamp", sign.timestamp);
+    formData.append("signature", sign.signature);
+    formData.append("folder", "results");
+    formData.append("resource_type", "raw");
+
+    const upload = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        "POST",
+        `https://api.cloudinary.com/v1_1/${sign.cloud_name}/raw/upload`
+      );
+      xhr.upload.onprogress = (e) =>
+        e.lengthComputable &&
+        setProgress(Math.round((e.loaded / e.total) * 100));
+      xhr.onload = () =>
+        xhr.status === 200
+          ? resolve(JSON.parse(xhr.response))
+          : reject();
+      xhr.onerror = reject;
+      xhr.send(formData);
+    });
+
+    await addDoc(collection(firestore, "results"), {
+      courseTitle: selectedCourse,
+      title: e.target.title.value,
+      url: upload.secure_url,
+      publicId: upload.public_id,
+      type: "pdf",
+      createdAt: serverTimestamp(),
+    });
+
+    await notifyStudents(`${e.target.title.value} Result Published on ${dateTime}`);
+
+    setSuccess(true);
+    e.target.reset();
     setProgress(0);
+  } catch (err) {
+    console.error("Upload error:", err);
+    alert("Upload failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
-    const file = e.target.pdf.files[0];
-
-    try {
-      const signRes = await fetch("/.netlify/functions/sign?folder=results");
-      const sign = await signRes.json();
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("api_key", sign.api_key);
-      formData.append("timestamp", sign.timestamp);
-      formData.append("signature", sign.signature);
-      formData.append("folder", "results");
-      formData.append("resource_type", "raw");
-
-      const upload = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open(
-          "POST",
-          `https://api.cloudinary.com/v1_1/${sign.cloud_name}/raw/upload`
-        );
-        xhr.upload.onprogress = (e) =>
-          e.lengthComputable &&
-          setProgress(Math.round((e.loaded / e.total) * 100));
-        xhr.onload = () =>
-          xhr.status === 200
-            ? resolve(JSON.parse(xhr.response))
-            : reject();
-        xhr.onerror = reject;
-        xhr.send(formData);
-      });
-
-      await addDoc(collection(firestore, "results"), {
-        courseTitle: selectedCourse,
-        title: e.target.title.value,
-        url: upload.secure_url,
-        publicId: upload.public_id,
-        type: "pdf",
-        createdAt: serverTimestamp(),
-      });
-
-      await notifyStudents(`${e.target.title.value} Result Published on ${dateTime}`);
-
-      setSuccess(true);
-      e.target.reset();
-      setProgress(0);
-    } catch {
-      alert("Upload failed");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   /* ---------------- DELETE ---------------- */
   const deleteResult = async (r) => {
