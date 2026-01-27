@@ -391,7 +391,11 @@ export default function UploadResults() {
               rel="noreferrer"
               className="flex items-center gap-1 text-blue-600 text-sm"
             >
-              <FaFilePdf className="text-red-600" /> Open
+              {r.type === "pdf" ? (
+                <>
+                  <FaFilePdf className="text-red-600" /> Open
+                </>
+              ) : null}
             </a>
 
             <button
