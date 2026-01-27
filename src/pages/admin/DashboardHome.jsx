@@ -5,10 +5,9 @@ import {
   FaImage,
   FaFilePdf,
   FaPoll,
-  FaEye,
-  FaDownload,
   FaSignOutAlt,
   FaUsers,
+  FaCloud,
 } from "react-icons/fa";
 import { signOut } from "firebase/auth";
 import { auth, firestore } from "../../firebaseConfig";
@@ -16,8 +15,10 @@ import { collection, getDocs } from "firebase/firestore";
 
 export default function DashboardHome() {
   const navigate = useNavigate();
+
   const [stats, setStats] = useState(null);
   const [courseEnrollments, setCourseEnrollments] = useState({});
+  const [cloudinary, setCloudinary] = useState(null);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -36,49 +37,39 @@ export default function DashboardHome() {
           getDocs(collection(firestore, "users")),
         ]);
 
-        // ---- COUNTS ----
+        // COUNTS
         const courses = coursesSnap.size;
         const photos = photosSnap.size;
         const notes = pdfSnap.size;
         const results = resultSnap.size;
 
-        // ---- NOTES DOWNLOADS ONLY ----
-        let pdfDownloads = 0;
-        pdfSnap.forEach(d => {
-          pdfDownloads += d.data().downloads || 0;
-        });
-
-        // ---- RESULT VIEWS ONLY ----
-        let resultViews = 0;
-        resultSnap.forEach(d => {
-          resultViews += d.data().views || 0;
-        });
-
-        // ---- COURSE-WISE ENROLLMENTS ----
+        // COURSE ENROLLMENTS
         const enrollMap = {};
         usersSnap.forEach(u => {
-          const enrolled = u.data().enrolledCourses || [];
-          enrolled.forEach(course => {
+          (u.data().enrolledCourses || []).forEach(course => {
             enrollMap[course] = (enrollMap[course] || 0) + 1;
           });
         });
 
-        setStats({
-          courses,
-          photos,
-          notes,
-          results,
-          pdfDownloads,
-          resultViews,
-        });
-
+        setStats({ courses, photos, notes, results });
         setCourseEnrollments(enrollMap);
       } catch (err) {
         console.error("Dashboard error:", err);
       }
     }
 
+    async function loadCloudinaryUsage() {
+      try {
+        const res = await fetch("/.netlify/functions/cloudinary-usage");
+        const data = await res.json();
+        setCloudinary(data);
+      } catch (err) {
+        console.error("Cloudinary fetch error:", err);
+      }
+    }
+
     loadDashboard();
+    loadCloudinaryUsage();
   }, []);
 
   const logout = async () => {
@@ -91,7 +82,7 @@ export default function DashboardHome() {
   return (
     <>
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-gray-800">
           Admin Dashboard
         </h1>
@@ -99,13 +90,13 @@ export default function DashboardHome() {
         <button
           onClick={logout}
           className="flex items-center gap-2 bg-red-600 text-white
-            px-4 py-2 rounded-xl shadow hover:brightness-110 transition"
+          px-4 py-2 rounded-xl shadow hover:brightness-110 transition"
         >
           <FaSignOutAlt /> Logout
         </button>
       </div>
 
-      {/* ================= ROW 1 ================= */}
+      {/* CONTENT OVERVIEW */}
       <Section title="Content Overview">
         <Grid4>
           <Stat icon={<FaFilePdf />} title="Notes" value={stats.notes} />
@@ -115,35 +106,46 @@ export default function DashboardHome() {
         </Grid4>
       </Section>
 
-      {/* ================= ROW 2 ================= 
-      <Section title="Engagement">
-        <Grid4>
-          <Stat
-            icon={<FaDownload />}
-            title="Notes Downloads"
-            value={stats.pdfDownloads}
-          />
-          <Stat
-            icon={<FaEye />}
-            title="Result PDF Views"
-            value={stats.resultViews}
-          />
-        </Grid4>
-      </Section>
-        */}
-      {/* ================= ROW 3 ================= */}
+{cloudinary && (
+  <Section title="Cloudinary Folder Storage">
+    <Grid4>
+      <Stat
+        icon={<FaImage />}
+        title="Gallery"
+        value={cloudinary.gallery}
+      />
+      <Stat
+        icon={<FaFilePdf />}
+        title="PDF"
+        value={cloudinary.pdfs}
+      />
+      <Stat
+        icon={<FaBook />}
+        title="Results"
+        value={cloudinary.results}
+      />
+      <Stat
+        icon={<FaCloud />}
+        title="Total Storage"
+        value={cloudinary.total}
+      />
+    </Grid4>
+  </Section>
+)}
+
+      
+
+      {/* COURSE ENROLLMENTS */}
       <Section title="Students Enrolled (Course Wise)">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {Object.entries(courseEnrollments).map(([course, count]) => (
             <div
               key={course}
               className="bg-white rounded-2xl p-5 shadow
-                flex items-center gap-4 hover:shadow-lg transition"
+              flex items-center gap-4 hover:shadow-lg transition"
             >
-              <div
-                className="w-12 h-12 bg-red-600 text-white
-                  rounded-xl flex items-center justify-center"
-              >
+              <div className="w-12 h-12 bg-red-600 text-white rounded-xl
+              flex items-center justify-center">
                 <FaUsers />
               </div>
               <div>
@@ -160,9 +162,7 @@ export default function DashboardHome() {
   );
 }
 
-/* ===================== */
-/* REUSABLE COMPONENTS */
-/* ===================== */
+/* ================= REUSABLE ================= */
 
 function Section({ title, children }) {
   return (
@@ -185,19 +185,17 @@ function Grid4({ children }) {
 
 function Stat({ icon, title, value }) {
   return (
-    <div
-      className="bg-white rounded-2xl p-6 shadow
-        flex items-center gap-4 hover:shadow-xl transition"
-    >
-      <div
-        className="w-12 h-12 rounded-xl bg-red-600 text-white
-          flex items-center justify-center text-xl"
-      >
+    <div className="bg-white rounded-2xl p-6 shadow
+    flex items-center gap-4 hover:shadow-xl transition">
+      <div className="w-12 h-12 rounded-xl bg-red-600 text-white
+      flex items-center justify-center text-xl">
         {icon}
       </div>
       <div>
         <p className="text-gray-500 text-sm">{title}</p>
-        <h3 className="text-3xl font-bold text-gray-800">{value}</h3>
+        <h3 className="text-3xl font-bold text-gray-800">
+          {value}
+        </h3>
       </div>
     </div>
   );
@@ -213,6 +211,42 @@ function DashboardSkeleton() {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+
+function StorageUsage({ data }) {
+  const percent = data.percentUsed;
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="font-semibold text-gray-700">
+          Cloudinary Storage Usage
+        </h3>
+        <span className="text-sm text-gray-500">
+          {data.totalGB} GB / {data.limitGB} GB
+        </span>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+        <div
+          className={`h-full transition-all duration-500
+            ${percent >= 80 ? "bg-red-600" : "bg-green-600"}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      <div className="flex justify-between text-sm">
+        <span className="text-gray-500">{percent}% used</span>
+        {data.isWarning && (
+          <span className="text-red-600 font-semibold">
+            ⚠ Storage almost full!
+          </span>
+        )}
+      </div>
     </div>
   );
 }
