@@ -3,7 +3,6 @@ import { auth, firestore } from "../firebaseConfig";
 import {
   collection,
   query,
-  where,
   orderBy,
   onSnapshot,
   getDoc,
@@ -28,7 +27,7 @@ export default function StudentNotifications() {
   const navigate = useNavigate();
 
   /* ===============================
-     FETCH USER ENROLLED COURSES
+     FETCH ENROLLED COURSES
   =============================== */
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -49,11 +48,8 @@ export default function StudentNotifications() {
      LISTEN TO NOTIFICATIONS
   =============================== */
   useEffect(() => {
-    if (!auth.currentUser) return;
-
     const q = query(
       collection(firestore, "notifications"),
-      where("uid", "==", auth.currentUser.uid),
       orderBy("createdAt", "desc")
     );
 
@@ -64,15 +60,15 @@ export default function StudentNotifications() {
       }));
 
       const filtered = all.filter((n) => {
-        // Course notifications visible to everyone
-        if (n.type === "course") return true;
+        // Global notifications (course announcements)
+        if (n.type === "course" && !n.courseId) return true;
 
-        // Notes & results only for enrolled courses
-        if (["notes", "result"].includes(n.type)) {
-          return enrolledCourses.includes(n.courseTitle);
+        // Course-based notifications
+        if (n.courseId) {
+          return enrolledCourses.includes(n.courseId);
         }
 
-        return true;
+        return false;
       });
 
       setItems(filtered);
@@ -82,36 +78,18 @@ export default function StudentNotifications() {
   }, [enrolledCourses]);
 
   /* ===============================
-     UNREAD COUNT
-  =============================== */
-  const unreadCount = items.length;
-
-  /* ===============================
-     DELETE SINGLE NOTIFICATION
+     DELETE HANDLERS
   =============================== */
   const deleteNotification = async (id) => {
-    try {
-      await deleteDoc(doc(firestore, "notifications", id));
-    } catch (err) {
-      console.error("Delete failed:", err);
-    }
+    await deleteDoc(doc(firestore, "notifications", id));
   };
 
-  /* ===============================
-     DELETE ALL NOTIFICATIONS
-  =============================== */
   const deleteAllNotifications = async () => {
-    try {
-      const batch = writeBatch(firestore);
-
-      items.forEach((n) => {
-        batch.delete(doc(firestore, "notifications", n.id));
-      });
-
-      await batch.commit();
-    } catch (err) {
-      console.error("Delete all failed:", err);
-    }
+    const batch = writeBatch(firestore);
+    items.forEach((n) =>
+      batch.delete(doc(firestore, "notifications", n.id))
+    );
+    await batch.commit();
   };
 
   /* ===============================
@@ -120,13 +98,9 @@ export default function StudentNotifications() {
   const handleClick = async (n) => {
     await deleteNotification(n.id);
 
-    if (n.type === "notes") {
-      navigate(`/student/notes`);
-    } else if (n.type === "result") {
-      navigate(`/student/results`);
-    } else if (n.type === "course") {
-      navigate(`/student/courses`);
-    }
+    if (n.type === "notes") navigate("/student/notes");
+    else if (n.type === "result") navigate("/student/results");
+    else navigate("/student/courses");
   };
 
   return (
@@ -135,23 +109,21 @@ export default function StudentNotifications() {
 
         {/* HEADER */}
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Bell size={18} />
-            Notifications
-            {unreadCount > 0 && (
-              <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">
-                {unreadCount}
+          <h3 className="font-semibold flex items-center gap-2">
+            <Bell size={18} /> Notifications
+            {items.length > 0 && (
+              <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">
+                {items.length}
               </span>
             )}
           </h3>
 
-          {unreadCount > 0 && (
+          {items.length > 0 && (
             <button
               onClick={deleteAllNotifications}
-              className="text-xs text-blue-600 flex items-center gap-1 hover:underline"
+              className="text-xs text-blue-600 flex items-center gap-1"
             >
-              <CheckCheck size={14} />
-              Clear all
+              <CheckCheck size={14} /> Clear all
             </button>
           )}
         </div>
@@ -168,17 +140,13 @@ export default function StudentNotifications() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
                 onClick={() => handleClick(n)}
-                className="flex gap-3 p-3 rounded-xl cursor-pointer transition bg-red-50 hover:bg-red-100"
+                className="flex gap-3 p-3 rounded-xl cursor-pointer bg-red-50 hover:bg-red-100"
               >
                 <Icon type={n.type} />
-
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-800">
-                    {n.title}
-                  </p>
+                  <p className="text-sm font-semibold">{n.title}</p>
                   <p className="text-xs text-gray-600">{n.message}</p>
                 </div>
-
                 <span className="w-2 h-2 mt-2 rounded-full bg-red-600" />
               </motion.div>
             ))}
@@ -207,15 +175,11 @@ function Icon({ type }) {
   );
 }
 
-/* ===============================
-   EMPTY STATE
-=============================== */
 function EmptyState() {
   return (
     <div className="text-center py-8">
       <Bell size={32} className="mx-auto text-gray-400 mb-2" />
       <p className="text-sm text-gray-500">No notifications yet</p>
-      <p className="text-xs text-gray-400">Updates will appear here</p>
     </div>
   );
 }

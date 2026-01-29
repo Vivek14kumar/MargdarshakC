@@ -35,9 +35,11 @@ export default function StudentCourses() {
 
     const userRef = doc(firestore, "users", auth.currentUser.uid);
 
-    // Add course to enrolledCourses array
+    if (userData.enrolledCourses?.includes(course.courseId)) return; // already enrolled
+
+    // Add courseId to enrolledCourses
     await updateDoc(userRef, {
-      enrolledCourses: arrayUnion(course.title || course.id)
+      enrolledCourses: arrayUnion(course.courseId)
     });
 
     // Refresh userData
@@ -49,18 +51,16 @@ export default function StudentCourses() {
 
   // Split courses into enrolled and available
   const enrolledCourses = allCourses.filter(course =>
-    userData.enrolledCourses?.some(e => e === course.id || e === course.title)
+    userData.enrolledCourses?.includes(course.courseId)
   );
   const availableCourses = allCourses.filter(course =>
-    !userData.enrolledCourses?.some(e => e === course.id || e === course.title)
+    !userData.enrolledCourses?.includes(course.courseId)
   );
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
-      {/* ===== DESKTOP SIDEBAR ===== */}
       <StudentNavbar className="hidden md:flex fixed top-0 left-0 h-full z-20" />
 
-      {/* ===== MAIN CONTENT ===== */}
       <main className="flex-1 md:ml-64 px-4 md:px-8 pb-28">
         <h1 className="text-3xl font-bold text-red-700 mt-6">My Courses</h1>
 
@@ -82,7 +82,11 @@ export default function StudentCourses() {
           {availableCourses.length > 0 ? (
             <CourseGrid>
               {availableCourses.map(course => (
-                <CourseCard key={course.id} course={course} onEnroll={() => handleEnroll(course)} />
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  onEnroll={() => handleEnroll(course)}
+                />
               ))}
             </CourseGrid>
           ) : (
@@ -91,14 +95,12 @@ export default function StudentCourses() {
         </Section>
       </main>
 
-      {/* ===== MOBILE BOTTOM NAV ===== */}
       <StudentBottomNav className="md:hidden" />
     </div>
   );
 }
 
 /* ================= UI COMPONENTS ================= */
-
 function Section({ title, children }) {
   return (
     <section className="mt-8">
@@ -117,20 +119,29 @@ function CourseGrid({ children }) {
 }
 
 function CourseCard({ course, enrolled, onEnroll }) {
+  const createdAt = course.createdAt?.toDate ? course.createdAt.toDate() : new Date(course.createdAt);
+
   return (
     <div
       className={`bg-white/90 backdrop-blur-md border border-gray-200 rounded-3xl shadow-lg p-6
       hover:shadow-2xl hover:scale-[1.02] transition-transform duration-200 cursor-pointer
-      ${enrolled ? "max-w-md mx-auto" : ""}`} // only enrolled courses get smaller card
+      ${enrolled ? "max-w-md mx-auto" : ""}`}
     >
       <div className="flex items-center gap-4 mb-3">
         <div className="w-12 h-12 flex items-center justify-center bg-red-100 text-red-700 rounded-xl">
           <BookOpen size={24} />
         </div>
-        <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
+          <p className="text-xs text-gray-500">
+            {course.batchYear ? `Batch: ${course.batchYear}` : ""}{" "}
+            {createdAt && `(Created: ${createdAt.toLocaleDateString()})`}
+          </p>
+        </div>
       </div>
 
       <p className="text-gray-500 text-sm mb-4">{course.desc || "No description available"}</p>
+      {course.duration && <p className="text-gray-600 text-xs mb-2">Duration: {course.duration}</p>}
 
       {enrolled ? (
         <span className="text-green-600 font-semibold inline-flex items-center gap-1">
@@ -159,7 +170,7 @@ function PageSkeleton() {
       <div className="h-6 w-48 bg-gray-200 rounded" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {[1,2,3,4,5,6].map(i => (
-          <div key={i} className="h-40 bg-white/80 rounded-2xl" />
+          <div key={i} className="h-48 bg-white/80 rounded-2xl" />
         ))}
       </div>
     </div>

@@ -15,16 +15,15 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { firestore } from "../../firebaseConfig";
-import {FaFilePdf, FaSpinner} from "react-icons/fa";
+import { FaFilePdf, FaSpinner } from "react-icons/fa";
 
 export default function UploadNotes() {
   const [courses, setCourses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState(null);
   const [pdfs, setPdfs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [success, setSuccess] = useState(false);
-
   const [deletingId, setDeletingId] = useState(null);
 
   /* PAGINATION */
@@ -32,26 +31,49 @@ export default function UploadNotes() {
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
 
+  /* 🔥 FORCE SNAPSHOT REFRESH */
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const resetPagination = () => {
+    setPdfs([]);
+    setLastDoc(null);
+    setHasMore(true);
+    setRefreshKey((k) => k + 1); // 🔥 critical
+  };
+
   /* ===============================
-     FETCH COURSES
+     FETCH ACTIVE COURSES
   =============================== */
   useEffect(() => {
     const fetchCourses = async () => {
-      const snap = await getDocs(collection(firestore, "courses"));
-      setCourses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const q = query(
+        collection(firestore, "courses"),
+        where("status", "==", "active"),
+        orderBy("createdAt", "desc")
+      );
+
+      const snap = await getDocs(q);
+      setCourses(
+        snap.docs.map((d) => ({
+          id: d.id,
+          courseId: d.data().courseId,
+          title: d.data().title,
+        }))
+      );
     };
+
     fetchCourses();
   }, []);
 
   /* ===============================
-     REAL-TIME + PAGINATED PDFs
+     REALTIME PDFs (PAGE 1)
   =============================== */
   useEffect(() => {
     if (!selectedCourse) return;
 
     const q = query(
       collection(firestore, "pdfs"),
-      where("courseTitle", "==", selectedCourse),
+      where("courseId", "==", selectedCourse.courseId),
       where("deleted", "==", false),
       orderBy("createdAt", "desc"),
       limit(PAGE_SIZE)
@@ -65,17 +87,17 @@ export default function UploadNotes() {
     });
 
     return () => unsub();
-  }, [selectedCourse]);
+  }, [selectedCourse, refreshKey]);
 
   /* ===============================
-     LOAD MORE
+     LOAD MORE (PAGE 2+)
   =============================== */
   const loadMore = async () => {
     if (!lastDoc || !hasMore) return;
 
     const q = query(
       collection(firestore, "pdfs"),
-      where("courseTitle", "==", selectedCourse),
+      where("courseId", "==", selectedCourse.courseId),
       where("deleted", "==", false),
       orderBy("createdAt", "desc"),
       startAfter(lastDoc),
@@ -110,7 +132,8 @@ export default function UploadNotes() {
           type: "notes",
           title: "New Notes Uploaded",
           message: `${noteTitle} notes are now available`,
-          courseTitle: selectedCourse,
+          courseId: selectedCourse.courseId,
+          courseTitle: selectedCourse.title,
           read: false,
           createdAt: serverTimestamp(),
         })
@@ -121,161 +144,130 @@ export default function UploadNotes() {
   };
 
   /* ===============================
-   UPLOAD PDF (SERVERLESS) WITH SIZE LIMIT
-=============================== */
-const submit = async (e) => {
-  e.preventDefault();
-  if (!selectedCourse) return alert("Select a course");
-
-  const file = e.target.pdfFile.files[0];
-  const title = e.target.title.value;
-
-  if (!file) return alert("Select PDF");
-
-  // ✅ Check file size (10 MB = 10 * 1024 * 1024 bytes)
-  const MAX_SIZE = 10 * 1024 * 1024; 
-  if (file.size > MAX_SIZE) {
-    alert(
-      "PDF is too large! Maximum allowed size is 10 MB.\n\nTips:\n" +
-      "- Split the PDF into smaller parts (per chapter)\n" +
-      "- Compress images inside the PDF\n" +
-      "- Use online PDF compressors like SmallPDF or ILovePDF"
-    );
-    return;
-  }
-
-  setLoading(true);
-  setProgress(0);
-
-  try {
-    // 1️⃣ Get Cloudinary signature
-    const sigRes = await fetch(
-      `/.netlify/functions/sign?folder=pdfs/${selectedCourse}`
-    );
-    const sig = await sigRes.json();
-
-    // 2️⃣ Upload to Cloudinary
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("folder", `pdfs/${selectedCourse}`);
-    formData.append("resource_type", "raw");
-    formData.append("api_key", sig.api_key);
-    formData.append("timestamp", sig.timestamp);
-    formData.append("signature", sig.signature);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open(
-      "POST",
-      `https://api.cloudinary.com/v1_1/${sig.cloud_name}/auto/upload`
-    );
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        setProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
-
-    xhr.onload = async () => {
-      const res = JSON.parse(xhr.responseText);
-      if (!res.public_id) throw new Error("Upload failed");
-
-      // 3️⃣ Save PDF in Firestore
-      await addDoc(collection(firestore, "pdfs"), {
-        title,
-        url: res.secure_url,
-        publicId: res.public_id,
-        courseTitle: selectedCourse,
-        downloads: 0,
-        deleted: false,
-        createdAt: serverTimestamp(),
-      });
-
-      // 4️⃣ Notify students
-      await notifyStudents(title);
-
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-      setLoading(false);
-      setProgress(0);
-      e.target.reset();
-    };
-
-    xhr.onerror = () => {
-      alert("Upload failed");
-      setLoading(false);
-    };
-
-    xhr.send(formData);
-  } catch (err) {
-    console.error("Upload error:", err);
-    setLoading(false);
-  }
-};
-
-
-  /* ===============================
-     DELETE PDF (SERVERLESS)
+     UPLOAD PDF
   =============================== */
-const removePDF = async (pdf) => {
-  if (!window.confirm("Delete this PDF permanently?")) return;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!selectedCourse) return alert("Select a course");
 
-  setDeletingId(pdf.id); // 🔄 start loading
+    const file = e.target.pdfFile.files[0];
+    const title = e.target.title.value;
+    if (!file) return alert("Select PDF");
 
-  try {
-    const res = await fetch("/.netlify/functions/delete-pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        pdfId: pdf.id,
-        publicId: pdf.publicId,
-        resourceType: pdf.resourceType || "raw",
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || "Delete failed");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Max PDF size is 10MB");
+      return;
     }
 
-    console.log("Deleted:", pdf.title);
-    // ✅ Firestore onSnapshot will auto-remove from UI
-  } catch (err) {
-    console.error(err);
-    alert("Delete failed. Please try again.");
-  } finally {
-    setDeletingId(null); // 🔄 stop loading
-  }
-};
+    setLoading(true);
+    setProgress(0);
 
+    try {
+      const sigRes = await fetch(
+        `/.netlify/functions/sign?folder=pdfs/${selectedCourse.courseId}`
+      );
+      const sig = await sigRes.json();
 
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", `pdfs/${selectedCourse.courseId}`);
+      formData.append("resource_type", "raw");
+      formData.append("api_key", sig.api_key);
+      formData.append("timestamp", sig.timestamp);
+      formData.append("signature", sig.signature);
 
-  /* ===============================
-     DOWNLOAD COUNTER
-  =============================== */
-  const incrementDownload = async (pdfId) => {
-    await updateDoc(doc(firestore, "pdfs", pdfId), {
-      downloads: increment(1),
-    });
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        "POST",
+        `https://api.cloudinary.com/v1_1/${sig.cloud_name}/auto/upload`
+      );
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = async () => {
+        const res = JSON.parse(xhr.responseText);
+        if (!res.public_id) throw new Error("Upload failed");
+
+        await addDoc(collection(firestore, "pdfs"), {
+          title,
+          url: res.secure_url,
+          publicId: res.public_id,
+          courseId: selectedCourse.courseId,
+          courseTitle: selectedCourse.title,
+          downloads: 0,
+          deleted: false,
+          createdAt: serverTimestamp(),
+        });
+
+        await notifyStudents(title);
+        resetPagination();
+
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+        setLoading(false);
+        setProgress(0);
+        e.target.reset();
+      };
+
+      xhr.send(formData);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
   };
 
+  /* ===============================
+     DELETE PDF
+  =============================== */
+  const removePDF = async (pdf) => {
+    if (!window.confirm("Delete this PDF permanently?")) return;
+    setDeletingId(pdf.id);
+
+    try {
+      await fetch("/.netlify/functions/delete-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pdfId: pdf.id,
+          publicId: pdf.publicId,
+          resourceType: "raw",
+        }),
+      });
+
+      resetPagination();
+    } catch (err) {
+      alert("Delete failed");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  /* ===============================
+     UI
+  =============================== */
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-4">
-      {/* SELECT COURSE */}
       <select
-        value={selectedCourse}
-        onChange={(e) => setSelectedCourse(e.target.value)}
+        value={selectedCourse?.courseId || ""}
+        onChange={(e) =>
+          setSelectedCourse(
+            courses.find((c) => c.courseId === e.target.value)
+          )
+        }
         className="border rounded px-3 py-2 w-full"
       >
         <option value="">-- Select Course --</option>
         {courses.map((c) => (
-          <option key={c.id} value={c.title}>
+          <option key={c.courseId} value={c.courseId}>
             {c.title}
           </option>
         ))}
       </select>
 
-      {/* UPLOAD FORM */}
       <div className="bg-white p-6 rounded shadow">
         {success && (
           <p className="text-green-600 text-center mb-2">
@@ -290,9 +282,7 @@ const removePDF = async (pdf) => {
             required
             className="w-full border px-3 py-2 rounded"
           />
-
           <input type="file" name="pdfFile" accept="application/pdf" required />
-
           <button
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2 rounded"
@@ -311,66 +301,53 @@ const removePDF = async (pdf) => {
         </form>
       </div>
 
-      {/* PDF LIST */}
       <div className="bg-white p-6 rounded shadow">
-        {pdfs.length === 0 ? (
-          <p className="text-center text-gray-500">No PDFs found</p>
-        ) : (
-          <>
-            {pdfs.map((pdf) => (
-              <div
-                key={pdf.id}
-                className="border p-3 rounded mb-2 flex justify-between"
+        {pdfs.map((pdf) => (
+          <div
+            key={pdf.id}
+            className="border p-3 rounded mb-2 flex justify-between"
+          >
+            <div>
+              <p className="font-semibold">{pdf.title}</p>
+              <p className="text-xs text-gray-500">
+                Downloads: {pdf.downloads || 0}
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <a
+                href={pdf.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 flex items-center gap-1"
               >
-                <div>
-                  <p className="font-semibold">{pdf.title}</p>
-                  <p className="text-xs text-gray-500">
-                    Downloads: {pdf.downloads || 0}
-                  </p>
-                </div>
+                <FaFilePdf /> Open
+              </a>
 
-                <div className="flex gap-3">
-                  <a
-                    href={pdf.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => incrementDownload(pdf.id)}
-                    className="flex items-center gap-1 text-blue-600 text-sm font-medium hover:underline"
-                  >
-                    <FaFilePdf className="text-blue-600 text-base" />
-                    <span>Open</span>
-                  </a>
-
-                  <button
-                    onClick={() => removePDF(pdf)}
-                    disabled={deletingId === pdf.id}
-                    className={`text-red-600 flex items-center gap-2 ${
-                      deletingId === pdf.id ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    {deletingId === pdf.id ? (
-                      <>
-                        <span className="animate-spin"><FaSpinner/></span>
-                        Deleting...
-                      </>
-                    ) : (
-                      "Delete"
-                    )}
-                  </button>
-
-                </div>
-              </div>
-            ))}
-
-            {hasMore && (
               <button
-                onClick={loadMore}
-                className="w-full border py-2 rounded text-blue-600"
+                onClick={() => removePDF(pdf)}
+                disabled={deletingId === pdf.id}
+                className="text-red-600"
               >
-                Load More
+                {deletingId === pdf.id ? (
+                  <span className="animate-spin">
+                    <FaSpinner />
+                  </span>
+                ) : (
+                  "Delete"
+                )}
               </button>
-            )}
-          </>
+            </div>
+          </div>
+        ))}
+
+        {hasMore && (
+          <button
+            onClick={loadMore}
+            className="w-full border py-2 rounded text-blue-600"
+          >
+            Load More
+          </button>
         )}
       </div>
     </div>

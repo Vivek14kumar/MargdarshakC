@@ -17,6 +17,7 @@ export async function handler(event) {
       uid,
     } = JSON.parse(event.body);
 
+    /* ---------------- VALIDATION ---------------- */
     if (!title || !desc || !duration || !uid) {
       return {
         statusCode: 400,
@@ -24,34 +25,62 @@ export async function handler(event) {
       };
     }
 
-    /* 🔐 VERIFY ADMIN */
-    const adminDoc = await db.collection("users").doc(uid).get();
-    if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+    /* ---------------- ADMIN CHECK ---------------- */
+    const adminSnap = await db.collection("users").doc(uid).get();
+    if (!adminSnap.exists || !adminSnap.data().isAdmin) {
       return {
         statusCode: 403,
         body: JSON.stringify({ message: "Unauthorized" }),
       };
     }
 
-    /* 🔗 SLUG */
+    /* ---------------- SLUG ---------------- */
     const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
 
-    /* 📘 CREATE COURSE */
+    const year = new Date().getFullYear();
+
+    /* ---------------- COURSE ID (YOUR FORMAT) ---------------- */
+    const courseId = `COU-${year}-${slug}`;
+
+    /* ---------------- PREVENT DUPLICATE SAME YEAR ---------------- */
+    const existing = await db
+      .collection("courses")
+      .where("courseId", "==", courseId)
+      .limit(1)
+      .get();
+
+    if (!existing.empty) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({
+          message: "Course with same title already exists for this year",
+        }),
+      };
+    }
+
+    /* ---------------- CREATE COURSE ---------------- */
     const courseRef = await db.collection("courses").add({
+      courseId,              // 🔥 readable ID
       title,
+      slug,
+      batchYear: year,
+      status: "active",
+
       desc,
       duration,
       highlight: highlight || "",
-      slug,
-      features: (features || []).filter(f => f.text?.trim()),
-      uid,
+      features: (features || []).filter(
+        (f) => f?.text && f.text.trim()
+      ),
+
+      createdBy: uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    /* 🔔 NOTIFY STUDENTS */
+    /* ---------------- NOTIFY STUDENTS ---------------- */
     const studentsSnap = await db
       .collection("users")
       .where("role", "==", "student")
@@ -60,13 +89,13 @@ export async function handler(event) {
     const batch = db.batch();
 
     studentsSnap.forEach((doc) => {
-      const ref = db.collection("notifications").doc();
-      batch.set(ref, {
+      const notifyRef = db.collection("notifications").doc();
+      batch.set(notifyRef, {
         uid: doc.id,
         type: "course",
         title: "New Course Available",
-        message: `${title} course is now live`,
-        courseTitle: title,
+        message: `${title} (${year}) course is now live`,
+        courseId,        // ✅ use this everywhere
         courseSlug: slug,
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -79,14 +108,19 @@ export async function handler(event) {
       statusCode: 201,
       body: JSON.stringify({
         message: "Course created successfully",
-        courseId: courseRef.id,
+        courseId,
+        docId: courseRef.id,
       }),
     };
+
   } catch (error) {
-    console.error(error);
+    console.error("Add course error:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({
+        message: "Internal server error",
+        error: error.message,
+      }),
     };
   }
 }

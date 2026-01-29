@@ -1,6 +1,13 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, limit as fbLimit } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit as fbLimit,
+} from "firebase/firestore";
 import { firestore } from "../firebaseConfig";
 import SEO from "../components/SEO";
 
@@ -10,18 +17,33 @@ export default function CoursesPage({ limit }) {
 
   useEffect(() => {
     async function fetchCourses() {
-      const ref = collection(firestore, "courses");
+      try {
+        const ref = collection(firestore, "courses");
 
-      const q = limit ? query(ref, fbLimit(limit)) : ref;
-      const snap = await getDocs(q);
+        let q = query(
+          ref,
+          where("status", "==", "active"),
+          orderBy("createdAt", "desc")
+        );
 
-      const data = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+        // ✅ SAFE LIMIT HANDLING
+        if (limit) {
+          q = query(q, fbLimit(limit));
+        }
 
-      setCourses(data);
-      setLoading(false);
+        const snap = await getDocs(q);
+
+        const data = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        setCourses(data);
+      } catch (err) {
+        console.error("Error fetching courses:", err);
+      } finally {
+        setLoading(false);
+      }
     }
 
     fetchCourses();
@@ -29,10 +51,11 @@ export default function CoursesPage({ limit }) {
 
   return (
     <>
-    <SEO
-      title="Courses – Margdarshak Career Institute"
-      description="Explore CBSE, BSEB, NEET & JEE coaching courses."
-    />
+      <SEO
+        title="Courses – Margdarshak Career Institute"
+        description="Explore CBSE, BSEB, NEET & JEE coaching courses."
+      />
+
       <section className="max-w-7xl mx-auto px-4 py-20">
         <div className="text-center mb-14">
           <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">
@@ -45,11 +68,15 @@ export default function CoursesPage({ limit }) {
 
         {loading ? (
           <p className="text-center text-gray-500">Loading courses...</p>
+        ) : courses.length === 0 ? (
+          <p className="text-center text-gray-400">
+            No active courses available
+          </p>
         ) : (
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            {courses.map(course => (
+            {courses.map((course) => (
               <Link
-                key={course.slug}
+                key={course.id}
                 to={`/courses/${course.slug}`}
                 className="group bg-white rounded-3xl shadow-lg hover:shadow-2xl
                 transition-all duration-300 hover:-translate-y-2 p-6 border"
@@ -58,13 +85,15 @@ export default function CoursesPage({ limit }) {
                   {course.title}
                 </h3>
 
-                <p className="text-gray-600 text-sm mb-4">
+                <p className="text-gray-600 text-sm mb-4 line-clamp-3">
                   {course.desc}
                 </p>
 
-                <p className="text-sm text-gray-500 mb-6">
-                  ✔ {course.highlight}
-                </p>
+                {course.highlight && (
+                  <p className="text-sm text-gray-500 mb-6">
+                    ✔ {course.highlight}
+                  </p>
+                )}
 
                 <div className="flex justify-between text-red-600 font-semibold">
                   <span>View Details</span>
@@ -75,11 +104,12 @@ export default function CoursesPage({ limit }) {
           </div>
         )}
 
-        {limit && (
+        {limit && courses.length > 0 && (
           <div className="text-center mt-12">
             <Link
               to="/courses"
-              className="inline-block bg-red-600 text-white px-6 py-3 rounded-full font-semibold hover:bg-red-700 transition"
+              className="inline-block bg-red-600 text-white px-6 py-3
+              rounded-full font-semibold hover:bg-red-700 transition"
             >
               View All Courses →
             </Link>

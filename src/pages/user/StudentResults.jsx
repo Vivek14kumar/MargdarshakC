@@ -13,35 +13,49 @@ import {
 } from "firebase/firestore";
 
 import { FileText, X } from "lucide-react";
-
 import StudentBottomNav from "../../components/StudentBottomNav";
 import StudentNavbar from "../../components/StudentNavbar";
 
 export default function StudentResults() {
-  const [enrolledCourses, setEnrolledCourses] = useState([]);
-  const [activeCourse, setActiveCourse] = useState("");
+  const uid = auth.currentUser?.uid;
+
+  const [courses, setCourses] = useState([]); // [{ id, title }]
+  const [activeCourse, setActiveCourse] = useState(null); // course object
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [viewerPdf, setViewerPdf] = useState(null); // 👈 in-app viewer
+  const [viewerPdf, setViewerPdf] = useState(null);
 
   /* ---------------- FETCH ENROLLED COURSES ---------------- */
   useEffect(() => {
-    const fetchUserCourses = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
+    if (!uid) return;
 
-      const snap = await getDoc(doc(firestore, "users", user.uid));
-      if (snap.exists()) {
-        const courses = snap.data().enrolledCourses || [];
-        setEnrolledCourses(courses);
-        if (courses.length > 0) setActiveCourse(courses[0]);
-      }
+    const fetchEnrolledCourses = async () => {
+      const userSnap = await getDoc(doc(firestore, "users", uid));
+      if (!userSnap.exists()) return;
+
+      const enrolledIds = userSnap.data().enrolledCourses || [];
+      if (!enrolledIds.length) return;
+
+      const q = query(
+        collection(firestore, "courses"),
+        where("courseId", "in", enrolledIds)
+      );
+
+      const snap = await getDocs(q);
+
+      const courseList = snap.docs.map(d => ({
+        id: d.data().courseId,
+        title: d.data().title,
+      }));
+
+      setCourses(courseList);
+      setActiveCourse(courseList[0]);
     };
-    fetchUserCourses();
-  }, []);
 
-  /* ---------------- FETCH RESULTS COURSE-WISE ---------------- */
+    fetchEnrolledCourses();
+  }, [uid]);
+
+  /* ---------------- FETCH RESULTS ---------------- */
   useEffect(() => {
     if (!activeCourse) return;
 
@@ -50,7 +64,7 @@ export default function StudentResults() {
 
       const q = query(
         collection(firestore, "results"),
-        where("courseTitle", "==", activeCourse),
+        where("courseId", "==", activeCourse.id),
         orderBy("createdAt", "desc")
       );
 
@@ -62,17 +76,13 @@ export default function StudentResults() {
     fetchResults();
   }, [activeCourse]);
 
-  /* ---------------- OPEN RESULT IN APP ---------------- */
+  /* ---------------- VIEW RESULT PDF ---------------- */
   const openResultPDF = async (result) => {
-    try {
-      await updateDoc(doc(firestore, "results", result.id), {
-        views: increment(1),
-      });
+    await updateDoc(doc(firestore, "results", result.id), {
+      views: increment(1),
+    });
 
-      setViewerPdf(result.url); // 👈 open inside app
-    } catch (err) {
-      console.error("Failed to update view count", err);
-    }
+    setViewerPdf(result.url);
   };
 
   return (
@@ -82,7 +92,7 @@ export default function StudentResults() {
         <StudentNavbar />
       </div>
 
-      {/* MAIN CONTENT */}
+      {/* MAIN */}
       <div className="flex-1 md:ml-[296px] pb-28 px-4 md:px-8 pt-6">
         <h1 className="text-2xl md:text-3xl font-bold text-red-700">
           Results
@@ -90,18 +100,18 @@ export default function StudentResults() {
 
         {/* COURSE TABS */}
         <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
-          {enrolledCourses.map(course => (
+          {courses.map(course => (
             <button
-              key={course}
+              key={course.id}
               onClick={() => setActiveCourse(course)}
               className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition
                 ${
-                  activeCourse === course
+                  activeCourse?.id === course.id
                     ? "bg-red-600 text-white shadow-md"
                     : "bg-white border border-gray-300 text-gray-700 hover:bg-red-50"
                 }`}
             >
-              {course}
+              {course.title}
             </button>
           ))}
         </div>
@@ -127,13 +137,12 @@ export default function StudentResults() {
           )}
         </div>
 
-        {/* MOBILE NAV */}
         <div className="md:hidden">
           <StudentBottomNav />
         </div>
       </div>
 
-      {/* ================= IN-APP PDF VIEWER ================= */}
+      {/* PDF VIEWER */}
       {viewerPdf && (
         <div className="fixed inset-0 z-50 bg-black/80 flex flex-col">
           <div className="flex justify-end p-3">
@@ -156,24 +165,20 @@ export default function StudentResults() {
   );
 }
 
-/* ================= RESULT CARD ================= */
+/* ================= CARD ================= */
 function ResultCard({ result, openResultPDF }) {
   const formatDate = (ts) => {
     if (!ts?.seconds) return "";
     const d = new Date(ts.seconds * 1000);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(
-      d.getMonth() + 1
-    ).padStart(2, "0")}/${d.getFullYear()}`;
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md hover:shadow-lg p-5 transition flex flex-col gap-2">
+    <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col gap-2">
       {result.type === "rank" ? (
         <>
           <p className="font-semibold">{result.studentName}</p>
-          <p className="text-sm text-gray-600">
-            Rank: <span className="font-bold">{result.rank}</span>
-          </p>
+          <p className="text-sm">Rank: <b>{result.rank}</b></p>
           <p className="text-sm text-green-600 font-bold">
             Marks: {result.marks}
           </p>
@@ -201,9 +206,6 @@ function ResultCard({ result, openResultPDF }) {
   );
 }
 
-/* ================= SKELETON ================= */
 function ResultSkeleton() {
-  return (
-    <div className="bg-white h-28 rounded-2xl animate-pulse" />
-  );
+  return <div className="bg-white h-28 rounded-2xl animate-pulse" />;
 }

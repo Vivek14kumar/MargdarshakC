@@ -1,18 +1,13 @@
+import React, { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
-/*import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  getDocs,
-  query,
-  where
-} from "firebase/firestore";*/
-import { firestore } from "../../firebaseConfig";
 import CourseTable from "./CourseTable";
 import useAuth from "../../hooks/userAuth";
 
+/* ================= MAIN FORM ================= */
+
 export default function AddCourseForm() {
   const { user, loading } = useAuth();
+  const [createdCourseId, setCreatedCourseId] = useState(null);
 
   const {
     register,
@@ -38,89 +33,76 @@ export default function AddCourseForm() {
   if (loading) return <p>Checking auth...</p>;
   if (!user) return <p className="text-red-600">Access denied</p>;
 
-  const generateSlug = (text) =>
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-
-  /* ================= NOTIFY STUDENTS ================= 
-  const notifyStudents = async (courseTitle, courseSlug) => {
-  const usersSnap = await getDocs(
-    query(collection(firestore, "users"), where("role", "==", "student"))
-  );
-
-  console.log("Students found:", usersSnap.size);
-
-  if (usersSnap.empty) {
-    console.warn("No students found – no notifications sent");
-    return;
-  }
-
-  const batch = usersSnap.docs.map((u) =>
-    addDoc(collection(firestore, "notifications"), {
-      uid: u.id,
-      type: "course",
-      title: "New Course Available",
-      message: `${courseTitle} course is now live`,
-      courseTitle,
-      courseSlug,
-      read: false,
-      createdAt: serverTimestamp()
-    })
-  );
-
-  await Promise.all(batch);
-};*/
-
+  /* ================= SUBMIT ================= */
 
   const onSubmit = async (data) => {
-  try {
-    const res = await fetch("/.netlify/functions/addCourse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...data,
-        uid: user.uid,
-      }),
-    });
+    try {
+      setCreatedCourseId(null);
 
-    const result = await res.json();
+      const res = await fetch("/.netlify/functions/addCourse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          uid: user.uid
+        })
+      });
 
-    if (!res.ok) {
-      alert(result.message || "Failed to add course");
-      return;
+      const result = await res.json();
+
+      if (!res.ok) {
+        alert(result.message || "Failed to add course");
+        return;
+      }
+
+      setCreatedCourseId(result.courseId);
+      reset();
+
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Server error");
     }
+  };
 
-    reset();
-    console.log("Course added:", result.courseId);
-  } catch (err) {
-    console.error("Error:", err);
-    alert("Server error");
-  }
-};
-
+  /* ================= UI ================= */
 
   return (
     <div className="w-full space-y-6">
-      {/* ADD COURSE FORM */}
+
+      {/* ADD COURSE CARD */}
       <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
         <h2 className="text-lg font-semibold mb-2">Add New Course</h2>
 
-        {isSubmitSuccessful && (
-          <p className="text-emerald-600 text-xs mb-2">
-            ✓ Course added successfully
+        {isSubmitSuccessful && createdCourseId && (
+          <p className="text-emerald-600 text-xs mb-3">
+            ✓ Course added successfully — ID:{" "}
+            <span className="font-mono">{createdCourseId}</span>
           </p>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+
+          {/* BASIC INFO */}
           <div className="grid md:grid-cols-2 gap-3">
-            <Input label="Course Title" {...register("title", { required: true })} />
-            <Input label="Duration" {...register("duration", { required: true })} />
+            <Input
+              label="Course Title"
+              {...register("title", { required: true })}
+            />
+            <Input
+              label="Duration"
+              {...register("duration", { required: true })}
+            />
           </div>
 
-          <Textarea label="Description" {...register("desc", { required: true })} />
-          <Input label="Highlight" {...register("highlight")} />
+          <Textarea
+            label="Description"
+            {...register("desc", { required: true })}
+          />
+
+          <Input
+            label="Highlight (optional)"
+            {...register("highlight")}
+          />
 
           {/* FEATURES */}
           <div className="space-y-2">
@@ -168,6 +150,7 @@ export default function AddCourseForm() {
             </button>
           </div>
 
+          {/* SUBMIT */}
           <button
             disabled={isSubmitting}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-md text-sm transition"
@@ -177,37 +160,37 @@ export default function AddCourseForm() {
         </form>
       </div>
 
+      {/* COURSE TABLE */}
       <CourseTable />
     </div>
   );
 }
 
-/* ================= UI ================= */
-function Input({ label, ...props }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-600 mb-0.5">
-        {label}
-      </label>
-      <input
-        {...props}
-        className="w-full border rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-indigo-500"
-      />
-    </div>
-  );
-}
+/* ================= UI COMPONENTS ================= */
 
-function Textarea({ label, ...props }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-600 mb-0.5">
-        {label}
-      </label>
-      <textarea
-        {...props}
-        rows={2}
-        className="w-full border rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-indigo-500 resize-none"
-      />
-    </div>
-  );
-}
+const Input = React.forwardRef(({ label, ...props }, ref) => (
+  <div>
+    <label className="block text-xs font-medium text-slate-600 mb-0.5">
+      {label}
+    </label>
+    <input
+      ref={ref}
+      {...props}
+      className="w-full border rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-indigo-500"
+    />
+  </div>
+));
+
+const Textarea = React.forwardRef(({ label, ...props }, ref) => (
+  <div>
+    <label className="block text-xs font-medium text-slate-600 mb-0.5">
+      {label}
+    </label>
+    <textarea
+      ref={ref}
+      {...props}
+      rows={2}
+      className="w-full border rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-indigo-500 resize-none"
+    />
+  </div>
+));

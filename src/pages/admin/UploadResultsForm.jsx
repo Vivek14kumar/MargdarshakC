@@ -14,7 +14,7 @@ import {
   limit,
   startAfter,
 } from "firebase/firestore";
-import {FaFilePdf, FaSpinner } from "react-icons/fa";
+import { FaFilePdf, FaSpinner } from "react-icons/fa";
 
 const PAGE_SIZE = 5;
 
@@ -26,13 +26,13 @@ export default function UploadResults() {
 
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCourseId, setSelectedCourseId] = useState("");
 
   const [results, setResults] = useState([]);
   const [search, setSearch] = useState("");
 
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
-
   const [deletingId, setDeletingId] = useState(null);
 
   /*--------------DATE & TIME---------------------*/
@@ -45,23 +45,36 @@ export default function UploadResults() {
     hour12: true,
   });
 
-  /* ---------------- FETCH COURSES ---------------- */
+  /* ---------------- FETCH ACTIVE COURSES ---------------- */
   useEffect(() => {
-    getDocs(collection(firestore, "courses")).then((snap) => {
-      setCourses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const q = query(
+      collection(firestore, "courses"),
+      where("status", "==", "active"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setCourses(
+        snap.docs.map((d) => ({
+          courseId: d.data().courseId, // Save courseId
+          title: d.data().title,
+        }))
+      );
     });
+
+    return () => unsub();
   }, []);
 
   /* ---------------- REALTIME RESULTS ---------------- */
   useEffect(() => {
-    if (!selectedCourse) {
+    if (!selectedCourseId) {
       setResults([]);
       return;
     }
 
     const q = query(
       collection(firestore, "results"),
-      where("courseTitle", "==", selectedCourse),
+      where("courseId", "==", selectedCourseId),
       orderBy("createdAt", "desc"),
       limit(PAGE_SIZE)
     );
@@ -74,7 +87,7 @@ export default function UploadResults() {
     });
 
     return () => unsub();
-  }, [selectedCourse]);
+  }, [selectedCourseId]);
 
   /* ---------------- LOAD MORE ---------------- */
   const loadMore = async () => {
@@ -82,7 +95,7 @@ export default function UploadResults() {
 
     const q = query(
       collection(firestore, "results"),
-      where("courseTitle", "==", selectedCourse),
+      where("courseId", "==", selectedCourseId),
       orderBy("createdAt", "desc"),
       startAfter(lastDoc),
       limit(PAGE_SIZE)
@@ -103,7 +116,7 @@ export default function UploadResults() {
       query(
         collection(firestore, "users"),
         where("role", "==", "student"),
-        where("enrolledCourses", "array-contains", selectedCourse)
+        where("enrolledCourses", "array-contains", selectedCourseId)
       )
     );
 
@@ -125,11 +138,12 @@ export default function UploadResults() {
   /* ---------------- TOP 3 RESULT ---------------- */
   const submitRank = async (e) => {
     e.preventDefault();
-    if (!selectedCourse) return alert("Select course");
+    if (!selectedCourseId) return alert("Select course");
 
     setLoading(true);
     try {
       const data = {
+        courseId: selectedCourseId,
         courseTitle: selectedCourse,
         rank: e.target.rank.value,
         studentName: e.target.studentName.value,
@@ -151,81 +165,76 @@ export default function UploadResults() {
 
   /* ---------------- PDF RESULT ---------------- */
   const submitPDF = async (e) => {
-  e.preventDefault();
-  if (!selectedCourse) return alert("Select course");
+    e.preventDefault();
+    if (!selectedCourseId) return alert("Select course");
 
-  const file = e.target.pdf.files[0];
-  if (!file) return alert("Select a PDF file");
+    const file = e.target.pdf.files[0];
+    if (!file) return alert("Select a PDF file");
 
-  const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-
-  // ✅ Check file size
-  if (file.size > MAX_SIZE) {
-    alert(
-      "⚠ PDF is too large!\n\n" +
-      "Maximum allowed size is 10 MB.\n\n" +
-      "Tips for uploading large PDFs:\n" +
-      "- Split the PDF into smaller parts (per chapter)\n" +
-      "- Compress images inside the PDF\n" +
-      "- Use online compressors like SmallPDF or ILovePDF"
-    );
-    return;
-  }
-
-  setLoading(true);
-  setProgress(0);
-
-  try {
-    const signRes = await fetch("/.netlify/functions/sign?folder=results");
-    const sign = await signRes.json();
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("api_key", sign.api_key);
-    formData.append("timestamp", sign.timestamp);
-    formData.append("signature", sign.signature);
-    formData.append("folder", "results");
-    formData.append("resource_type", "raw");
-
-    const upload = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open(
-        "POST",
-        `https://api.cloudinary.com/v1_1/${sign.cloud_name}/raw/upload`
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (file.size > MAX_SIZE) {
+      alert(
+        "⚠ PDF is too large!\nMaximum allowed size is 10 MB.\nSplit/compress PDF if needed."
       );
-      xhr.upload.onprogress = (e) =>
-        e.lengthComputable &&
-        setProgress(Math.round((e.loaded / e.total) * 100));
-      xhr.onload = () =>
-        xhr.status === 200
-          ? resolve(JSON.parse(xhr.response))
-          : reject();
-      xhr.onerror = reject;
-      xhr.send(formData);
-    });
+      return;
+    }
 
-    await addDoc(collection(firestore, "results"), {
-      courseTitle: selectedCourse,
-      title: e.target.title.value,
-      url: upload.secure_url,
-      publicId: upload.public_id,
-      type: "pdf",
-      createdAt: serverTimestamp(),
-    });
-
-    await notifyStudents(`${e.target.title.value} Result Published on ${dateTime}`);
-
-    setSuccess(true);
-    e.target.reset();
+    setLoading(true);
     setProgress(0);
-  } catch (err) {
-    console.error("Upload error:", err);
-    alert("Upload failed");
-  } finally {
-    setLoading(false);
-  }
-};
 
+    try {
+      const signRes = await fetch("/.netlify/functions/sign?folder=results");
+      const sign = await signRes.json();
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("api_key", sign.api_key);
+      formData.append("timestamp", sign.timestamp);
+      formData.append("signature", sign.signature);
+      formData.append("folder", "results");
+      formData.append("resource_type", "raw");
+
+      const upload = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(
+          "POST",
+          `https://api.cloudinary.com/v1_1/${sign.cloud_name}/raw/upload`
+        );
+        xhr.upload.onprogress = (e) =>
+          e.lengthComputable &&
+          setProgress(Math.round((e.loaded / e.total) * 100));
+        xhr.onload = () =>
+          xhr.status === 200
+            ? resolve(JSON.parse(xhr.response))
+            : reject();
+        xhr.onerror = reject;
+        xhr.send(formData);
+      });
+
+      await addDoc(collection(firestore, "results"), {
+        courseId: selectedCourseId,
+        courseTitle: selectedCourse,
+        title: e.target.title.value,
+        url: upload.secure_url,
+        publicId: upload.public_id,
+        type: "pdf",
+        createdAt: serverTimestamp(),
+      });
+
+      await notifyStudents(
+        `${e.target.title.value} Result Published on ${dateTime}`
+      );
+
+      setSuccess(true);
+      e.target.reset();
+      setProgress(0);
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* ---------------- DELETE ---------------- */
   const deleteResult = async (r) => {
@@ -244,8 +253,7 @@ export default function UploadResults() {
         await deleteDoc(doc(firestore, "results", r.id));
       }
 
-      // UX delay
-      await new Promise((res) => setTimeout(res, 5000));
+      await new Promise((res) => setTimeout(res, 500)); // small UX delay
     } catch {
       alert("Delete failed");
     } finally {
@@ -255,9 +263,7 @@ export default function UploadResults() {
 
   /* ---------------- FILTER ---------------- */
   const filtered = results.filter((r) =>
-    (r.studentName || r.title || "")
-      .toLowerCase()
-      .includes(search.toLowerCase())
+    (r.studentName || r.title || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -265,12 +271,16 @@ export default function UploadResults() {
       {/* COURSE SELECT */}
       <select
         value={selectedCourse}
-        onChange={(e) => setSelectedCourse(e.target.value)}
+        onChange={(e) => {
+          const c = courses.find((x) => x.title === e.target.value);
+          setSelectedCourse(c?.title || "");
+          setSelectedCourseId(c?.courseId || "");
+        }}
         className="w-full border rounded-xl p-3 bg-white"
       >
         <option value="">-- Select Course --</option>
         {courses.map((c) => (
-          <option key={c.id} value={c.title}>
+          <option key={c.courseId} value={c.title}>
             {c.title}
           </option>
         ))}
@@ -284,9 +294,7 @@ export default function UploadResults() {
               key={t}
               onClick={() => setActiveTab(t)}
               className={`flex-1 py-2 font-semibold transition ${
-                activeTab === t
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100"
+                activeTab === t ? "bg-blue-600 text-white" : "bg-gray-100"
               }`}
             >
               {t === "rank" ? "Top 3 Results" : "Upload PDF"}
@@ -294,9 +302,7 @@ export default function UploadResults() {
           ))}
         </div>
 
-        {success && (
-          <p className="text-green-600 mb-3">✅ Saved successfully</p>
-        )}
+        {success && <p className="text-green-600 mb-3">✅ Saved successfully</p>}
 
         {activeTab === "rank" && (
           <form onSubmit={submitRank} className="space-y-3">
@@ -338,13 +344,13 @@ export default function UploadResults() {
             />
             <input type="file" name="pdf" accept="application/pdf" required />
             {progress > 0 && (
-            <div className="h-2 bg-gray-200 rounded overflow-hidden">
-              <div
-                className="h-full bg-blue-600 transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          )}
+              <div className="h-2 bg-gray-200 rounded overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
             <button className="w-full bg-blue-600 text-white py-2 rounded-xl">
               Upload PDF
             </button>
@@ -370,20 +376,16 @@ export default function UploadResults() {
             {r.type === "rank" ? (
               <p className="font-semibold">
                 🏆 {r.rank} – {r.studentName}
-                <span className="text-sm text-gray-500 ml-2">
-                  ({r.marks})
-                </span>
+                <span className="text-sm text-gray-500 ml-2">({r.marks})</span>
               </p>
             ) : (
               <>
                 <p className="font-semibold">{r.title}</p>
-                <p className="text-xs text-gray-500">
-                    Views: {r.views || 0}
-                  </p>
+                <p className="text-xs text-gray-500">Views: {r.views || 0}</p>
               </>
             )}
           </div>
-          
+
           <div className="flex items-center gap-4">
             <a
               href={r.url}
@@ -391,11 +393,11 @@ export default function UploadResults() {
               rel="noreferrer"
               className="flex items-center gap-1 text-blue-600 text-sm"
             >
-              {r.type === "pdf" ? (
+              {r.type === "pdf" && (
                 <>
                   <FaFilePdf className="text-red-600" /> Open
                 </>
-              ) : null}
+              )}
             </a>
 
             <button
@@ -416,10 +418,7 @@ export default function UploadResults() {
       ))}
 
       {hasMore && (
-        <button
-          onClick={loadMore}
-          className="w-full border py-2 rounded-xl"
-        >
+        <button onClick={loadMore} className="w-full border py-2 rounded-xl">
           Load More
         </button>
       )}

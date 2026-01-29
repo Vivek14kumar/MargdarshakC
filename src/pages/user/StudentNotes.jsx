@@ -30,15 +30,37 @@ export default function StudentNotes() {
 
   /* ---------------- COURSES ---------------- */
   useEffect(() => {
-    if (!uid) return;
+  if (!uid) return;
 
-    getDoc(doc(firestore, "users", uid)).then(snap => {
-      if (!snap.exists()) return;
-      const enrolled = snap.data().enrolledCourses || [];
-      setCourses(enrolled);
-      if (enrolled.length) setActiveCourse(enrolled[0]);
-    });
-  }, [uid]);
+  const fetchEnrolledCourses = async () => {
+    const userSnap = await getDoc(doc(firestore, "users", uid));
+    if (!userSnap.exists()) return;
+
+    const enrolledIds = userSnap.data().enrolledCourses || [];
+    if (!enrolledIds.length) return;
+
+    const q = query(
+      collection(firestore, "courses"),
+      where("courseId", "in", enrolledIds)
+    );
+
+    const snap = await getDocs(q);
+
+    const courseList = snap.docs.map(d => ({
+      id: d.data().courseId,   // IMPORTANT
+      title: d.data().title,
+    }));
+
+    if (!courseList.length) return;
+
+    setCourses(courseList);
+    setActiveCourse(courseList[0].id);
+  };
+
+  fetchEnrolledCourses();
+}, [uid]);
+
+
 
   /* ---------------- NOTES ---------------- */
   useEffect(() => {
@@ -46,7 +68,7 @@ export default function StudentNotes() {
 
     const q = query(
       collection(firestore, "pdfs"),
-      where("courseTitle", "==", activeCourse),
+      where("courseId", "==", activeCourse),
       where("deleted", "==", false),
       orderBy("createdAt", "desc")
     );
@@ -106,20 +128,21 @@ export default function StudentNotes() {
 
       {/* Course Tabs */}
       <div className="flex gap-2 mt-4 overflow-x-auto">
-        {courses.map(c => (
-          <button
-            key={c}
-            onClick={() => setActiveCourse(c)}
-            className={`px-4 py-2 rounded-full text-sm
-              ${activeCourse === c
-                ? "bg-red-600 text-white"
-                : "bg-white border"
-              }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
+  {courses.map(course => (
+    <button
+      key={course.id}
+      onClick={() => setActiveCourse(course.id)}
+      className={`px-4 py-2 rounded-full text-sm whitespace-nowrap
+        ${activeCourse === course.id
+          ? "bg-red-600 text-white"
+          : "bg-white border"
+        }`}
+    >
+      {course.title}
+    </button>
+  ))}
+</div>
+
 
       {/* Notes */}
       <div className="mt-6 grid md:grid-cols-2 gap-4">

@@ -2,17 +2,18 @@ import {
   collection,
   orderBy,
   query,
-  deleteDoc,
   doc,
   onSnapshot,
   limit,
   startAfter,
   getDocs,
+  updateDoc,
+  where,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { firestore } from "../../firebaseConfig";
 import EditCourseModal from "./EditCourseModal";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 const PAGE_SIZE = 5;
 
@@ -20,20 +21,22 @@ export default function CourseTable() {
   const [courses, setCourses] = useState([]);
   const [editCourse, setEditCourse] = useState(null);
 
+  const [tab, setTab] = useState("active"); // 🔥 active | archived
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-
-  const onCourseSaved = () => {
-  setEditCourse(null);
-};
 
   /* ===============================
      REAL-TIME FIRST PAGE
   =============================== */
   useEffect(() => {
+    setCourses([]);
+    setLastDoc(null);
+    setHasMore(true);
+
     const q = query(
       collection(firestore, "courses"),
+      where("status", "==", tab), // 🔥 FILTER FIX
       orderBy("createdAt", "desc"),
       limit(PAGE_SIZE)
     );
@@ -50,10 +53,10 @@ export default function CourseTable() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [tab]);
 
   /* ===============================
-     LOAD MORE (PAGINATION)
+     LOAD MORE
   =============================== */
   const loadMore = async () => {
     if (!lastDoc || !hasMore) return;
@@ -62,6 +65,7 @@ export default function CourseTable() {
 
     const q = query(
       collection(firestore, "courses"),
+      where("status", "==", tab),
       orderBy("createdAt", "desc"),
       startAfter(lastDoc),
       limit(PAGE_SIZE)
@@ -81,20 +85,46 @@ export default function CourseTable() {
   };
 
   /* ===============================
-     DELETE COURSE
+     ARCHIVE / RESTORE
   =============================== */
-  const deleteCourse = async (id) => {
-    const ok = confirm("Are you sure you want to delete this course?");
-    if (!ok) return;
+  const toggleArchive = async (course) => {
+    const nextStatus =
+      course.status === "active" ? "archived" : "active";
 
-    await deleteDoc(doc(firestore, "courses", id));
-    // 🔥 no refetch needed (onSnapshot handles it)
+    await updateDoc(doc(firestore, "courses", course.id), {
+      status: nextStatus,
+    });
   };
 
   return (
     <>
       <div className="bg-white border rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Courses</h3>
+
+        {/* 🔥 TABS */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setTab("active")}
+            className={`px-3 py-1.5 text-sm rounded-md border ${
+              tab === "active"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600"
+            }`}
+          >
+            Active
+          </button>
+
+          <button
+            onClick={() => setTab("archived")}
+            className={`px-3 py-1.5 text-sm rounded-md border ${
+              tab === "archived"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600"
+            }`}
+          >
+            Archived
+          </button>
+        </div>
 
         {/* DESKTOP TABLE */}
         <div className="hidden md:block">
@@ -113,34 +143,49 @@ export default function CourseTable() {
                   <td>{course.title}</td>
                   <td>{course.duration}</td>
                   <td>{course.highlight || "-"}</td>
+
                   <td className="text-right flex justify-end gap-3 py-2">
                     <button
                       onClick={() => setEditCourse(course)}
-                      className="text-indigo-600 hover:text-indigo-800"
+                      className="text-indigo-600"
                       title="Edit"
                     >
                       <Pencil size={16} />
                     </button>
+
                     <button
-                      onClick={() => deleteCourse(course.id)}
-                      className="text-red-600 hover:text-red-800"
-                      title="Delete"
+                      onClick={() => toggleArchive(course)}
+                      className={`text-sm ${
+                        course.status === "archived"
+                          ? "text-emerald-600"
+                          : "text-amber-600"
+                      }`}
                     >
-                      <Trash2 size={16} />
+                      {course.status === "archived"
+                        ? "Restore"
+                        : "Archive"}
                     </button>
                   </td>
                 </tr>
               ))}
+
+              {courses.length === 0 && (
+                <tr>
+                  <td colSpan="4" className="text-center py-6 text-slate-400">
+                    No courses found
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* MOBILE CARDS */}
+        {/* MOBILE */}
         <div className="md:hidden space-y-3">
           {courses.map((course) => (
             <div
               key={course.id}
-              className="border rounded-lg p-3 flex justify-between items-start"
+              className="border rounded-lg p-3 flex justify-between"
             >
               <div>
                 <p className="font-medium">{course.title}</p>
@@ -148,24 +193,30 @@ export default function CourseTable() {
                   Duration: {course.duration}
                 </p>
                 {course.highlight && (
-                  <p className="text-xs text-slate-600 mt-1">
+                  <p className="text-xs text-slate-600">
                     {course.highlight}
                   </p>
                 )}
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-2 text-right">
                 <button
                   onClick={() => setEditCourse(course)}
-                  className="text-indigo-600"
+                  className="text-indigo-600 text-sm"
                 >
-                  <Pencil size={18} />
+                  Edit
                 </button>
                 <button
-                  onClick={() => deleteCourse(course.id)}
-                  className="text-red-600"
+                  onClick={() => toggleArchive(course)}
+                  className={`text-sm ${
+                    course.status === "archived"
+                      ? "text-emerald-600"
+                      : "text-amber-600"
+                  }`}
                 >
-                  <Trash2 size={18} />
+                  {course.status === "archived"
+                    ? "Restore"
+                    : "Archive"}
                 </button>
               </div>
             </div>
@@ -188,13 +239,12 @@ export default function CourseTable() {
 
       {/* EDIT MODAL */}
       {editCourse && (
-  <EditCourseModal
-    course={editCourse}
-    onClose={() => setEditCourse(null)}
-    onSaved={onCourseSaved}
-  />
-)}
-
+        <EditCourseModal
+          course={editCourse}
+          onClose={() => setEditCourse(null)}
+          onSaved={() => setEditCourse(null)}
+        />
+      )}
     </>
   );
 }

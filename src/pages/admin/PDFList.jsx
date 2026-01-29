@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   collection,
-  getDocs,
   query,
   where,
   orderBy,
   updateDoc,
-  doc
+  doc,
+  onSnapshot,
+  increment,
 } from "firebase/firestore";
 import { firestore } from "../../firebaseConfig";
 
@@ -16,36 +17,35 @@ export default function PDFList({ selectedClass, selectedSubject }) {
   const [loading, setLoading] = useState(true);
 
   /* ===============================
-     LOAD PDFs
+     REAL-TIME LOAD PDFs
   =============================== */
-  const loadPDFs = async () => {
-    try {
-      setLoading(true);
+  useEffect(() => {
+    if (!selectedClass || !selectedSubject) {
+      setPdfs([]);
+      setLoading(false);
+      return;
+    }
 
-      const q = query(
-        collection(firestore, "pdfs"),
-        where("class", "==", selectedClass),
-        where("subject", "==", selectedSubject),
-        orderBy("createdAt", "desc")
-      );
+    setLoading(true);
 
-      const snapshot = await getDocs(q);
+    const q = query(
+      collection(firestore, "pdfs"),
+      where("class", "==", selectedClass),
+      where("subject", "==", selectedSubject),
+      orderBy("createdAt", "desc")
+    );
 
+    const unsub = onSnapshot(q, (snapshot) => {
       setPdfs(
         snapshot.docs.map((d) => ({
           id: d.id,
           ...d.data(),
         }))
       );
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoading(false);
-    }
-  };
+    });
 
-  useEffect(() => {
-    loadPDFs();
+    return () => unsub(); // cleanup
   }, [selectedClass, selectedSubject]);
 
   /* ===============================
@@ -55,14 +55,14 @@ export default function PDFList({ selectedClass, selectedSubject }) {
     const ref = doc(firestore, "pdfs", pdf.id);
 
     await updateDoc(ref, {
-      downloadCount: (pdf.downloadCount || 0) + 1,
+      downloadCount: increment(1),
     });
 
     window.open(pdf.url, "_blank");
   };
 
   /* ===============================
-     DELETE (Cloudinary + Firestore)
+     DELETE PDF
   =============================== */
   const deletePDF = async (pdf) => {
     if (!window.confirm("Delete this PDF permanently?")) return;
@@ -76,14 +76,14 @@ export default function PDFList({ selectedClass, selectedSubject }) {
       }),
     });
 
-    setPdfs((prev) => prev.filter((p) => p.id !== pdf.id));
+    // 🔥 onSnapshot auto refreshes UI
   };
 
   /* ===============================
      SEARCH FILTER
   =============================== */
   const filteredPDFs = pdfs.filter((pdf) =>
-    pdf.title.toLowerCase().includes(search.toLowerCase())
+    pdf.title?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (

@@ -1,6 +1,12 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  limit
+} from "firebase/firestore";
 import { firestore } from "../firebaseConfig";
 import { motion } from "framer-motion";
 import SEO from "../components/SEO";
@@ -26,23 +32,58 @@ const WHATSAPP = "919999999999";
 export default function CourseDetail() {
   const { slug } = useParams();
   const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchCourse() {
-      const q = query(
-        collection(firestore, "courses"),
-        where("slug", "==", slug)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) setCourse(snap.docs[0].data());
+      try {
+        const q = query(
+          collection(firestore, "courses"),
+          where("slug", "==", slug),
+          where("status", "==", "active"),
+          limit(1)
+        );
+
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          setCourse(snap.docs[0].data());
+        } else {
+          setCourse(null);
+        }
+      } catch (error) {
+        console.error("Error fetching course:", error);
+      } finally {
+        setLoading(false);
+      }
     }
+
     fetchCourse();
   }, [slug]);
 
-  if (!course) {
+  /* ⏳ LOADING */
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-gray-500">Loading course...</p>
+      </div>
+    );
+  }
+
+  /* ❌ NOT FOUND / ARCHIVED */
+  if (!course) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
+        <h2 className="text-2xl font-bold mb-3">Course Not Available</h2>
+        <p className="text-gray-600 mb-6">
+          This course is either archived or does not exist.
+        </p>
+        <Link
+          to="/courses"
+          className="bg-red-600 text-white px-6 py-3 rounded-full font-semibold hover:bg-red-700 transition"
+        >
+          View All Courses →
+        </Link>
       </div>
     );
   }
